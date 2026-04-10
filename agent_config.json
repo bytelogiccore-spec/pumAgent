@@ -1,0 +1,11 @@
+{
+  "api_url": "http://127.0.0.1:8000/v1/chat/completions",
+  "model": "gemma-4",
+  "max_loops": 20,
+  "system_prompt": "You are a highly capable autonomous AI assistant. Think clearly, step-by-step, and strictly follow the formatting rules to achieve the user's goal.\n",
+  "search_provider": "duckduckgo",
+  "tavily_api_key": "",
+  "google_api_key": "",
+  "google_cx": "",
+  "use_multi_agent_workflow": true
+}

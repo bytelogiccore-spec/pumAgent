@@ -1,0 +1,766 @@
+<script lang="ts">
+  import { marked } from "marked";
+  import DOMPurify from "dompurify";
+  DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+    if ('target' in node) {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  import { tick } from "svelte";
+  import {
+    appState,
+    interceptSlashCommand,
+    submitQuery,
+    stopAgent,
+    wipeChat,
+    compressChatMemory,
+  } from "../lib/store.svelte";
+  import { t } from "../lib/i18n.svelte";
+  let fileInput: HTMLInputElement;
+
+  async function handleFileSelect(e: Event) {
+    const target = e.target as HTMLInputElement;
+    if (!target.files) return;
+    
+    for (const file of Array.from(target.files)) {
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      const isText = file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.md') || file.name.endsWith('.csv');
+
+      let result = "";
+      
+      if (isVideo || (!isImage && !isText)) {
+         result = `[첨부 파일 참조: ${file.name}]`;
+         appState.attachedFiles = [
+            ...(appState.attachedFiles || []), 
+            { type: 'document', name: file.name, data: result, file }
+         ];
+      } else {
+         result = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+               let res = ev.target?.result as string;
+               if (isImage && res.includes(',')) res = res.split(',')[1];
+               resolve(res);
+            };
+            if (isImage) {
+               reader.readAsDataURL(file);
+            } else {
+               reader.readAsText(file);
+            }
+         });
+         
+         appState.attachedFiles = [
+            ...(appState.attachedFiles || []), 
+            { type: isImage ? 'image' : 'document', name: file.name, data: result, file }
+         ];
+      }
+    }
+    target.value = '';
+  }
+
+  function removeFile(index: number) {
+     appState.attachedFiles = appState.attachedFiles.filter((_, i) => i !== index);
+  }
+  $effect(() => {
+    if (appState.messages) {
+      scrollToBottom();
+    }
+  });
+
+  async function scrollToBottom() {
+    await tick();
+    if (appState.chatBoxElement) {
+      appState.chatBoxElement.scrollTop = appState.chatBoxElement.scrollHeight;
+    }
+  }
+
+  let isVoiceMode = $state(false);
+  let isRecording = $state(false);
+  let recognitionRef: any = null;
+
+  function startVoiceInput() {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("이 브라우저(Tauri/WebView)에서는 음성 인식을 지원하지 않습니다.");
+      return;
+    }
+    
+    // Clear previous query when starting fresh PTT
+    appState.query = "";
+    
+    const recognition = new SpeechRecognition();
+    recognitionRef = recognition;
+    recognition.lang = appState.config.language === "ko" ? 'ko-KR' : 'en-US';
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      isRecording = true;
+    };
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      appState.query = finalTranscript + interimTranscript;
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      alert("음성 인식 오류: " + event.error);
+      isRecording = false;
+      recognitionRef = null;
+    };
+
+    recognition.onend = () => {
+      isRecording = false;
+      recognitionRef = null;
+    };
+
+    recognition.start();
+  }
+
+  function stopVoiceInputAndSend() {
+    if (recognitionRef && isRecording) {
+      recognitionRef.stop();
+      // Allow a brief moment for the final `onresult` to process before submitting
+      setTimeout(() => {
+        if (appState.query.trim() !== "") {
+          submitQuery();
+        }
+      }, 300);
+    }
+  }
+
+  let viewingLogs = $state<string[] | null>(null);
+
+</script>
+
+{#if viewingLogs}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={() => (viewingLogs = null)}>
+    <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin-bottom:12px;">
+        <h3 style="margin:0;">📄 Step Logs</h3>
+        <button onclick={() => (viewingLogs = null)} style="background:transparent; border:none; font-size:1.2rem; cursor:pointer;">✖</button>
+      </div>
+      <div style="flex:1; overflow-y:auto; font-family:monospace; font-size:0.85rem; color:#1a1a1a; white-space:pre-wrap; background:#f9fafb; padding:12px;">
+        {viewingLogs.join("\n")}
+      </div>
+    </div>
+  </div>
+{/if}
+
+<div class="chat-section">
+  <div class="chat-header">
+    <h1 style="display:flex; align-items:center; gap:8px;">
+      PumAgent
+      <button
+        class="icon-btn"
+        onclick={() => interceptSlashCommand("/settings")}
+        aria-label="Settings"
+        title={t("chat.settings_hover")}
+        style="background:transparent; border:none; cursor:pointer; font-size:1.2rem; padding:4px;"
+      >
+        ⚙️
+      </button>
+    </h1>
+    <div class="header-buttons">
+      {#if appState.messages.length > 4}
+        <button
+          class="toggle-btn"
+          onclick={() => compressChatMemory()}
+          aria-label="Compress Memory"
+          title={t("chat.compress_memory")}
+          style="font-size: 1.2rem; background: transparent; border: none; padding: 4px; cursor: pointer;"
+        >
+          🗜
+        </button>
+      {/if}
+      <button
+        class="toggle-btn"
+        onclick={() => (appState.logExpanded = !appState.logExpanded)}
+        aria-label="Toggle Logs"
+        style="font-size: 1.2rem; background: transparent; border: none; padding: 4px; cursor: pointer;"
+      >
+        {appState.logExpanded ? "▶" : "◀"}
+      </button>
+    </div>
+  </div>
+
+  <div class="chat-box" bind:this={appState.chatBoxElement}>
+    {#each appState.messages as msg}
+      <div class="message {msg.role}">
+        <div class="avatar">{msg.role === "assistant" ? "🤖" : "🧑‍💻"}</div>
+        <div class="bubble" style="display:flex; flex-direction:column; gap:8px;">
+          {#if appState.isThinking && msg.role === "assistant" && msg === appState.messages[appState.messages.length - 1]}
+            <span class="thinking-text" style="color: #6b7280; font-size: 0.9rem; font-style: italic;">
+              {msg.logs && msg.logs.length > 0 ? msg.logs[msg.logs.length - 1] : "Thinking..."}
+            </span>
+          {:else}
+            <div>
+              {@html DOMPurify.sanitize(marked.parse(msg.content) as string, { ADD_ATTR: ['target'] })}
+            </div>
+            {#if msg.logs && msg.logs.length > 0}
+              <div style="margin-top: 8px; border-top: 1px dashed #d1d5db; padding-top: 8px;">
+                <button onclick={() => (viewingLogs = msg.logs || null)} style="background:transparent; border:1px solid #9ca3af; border-radius:4px; font-size:0.75rem; cursor:pointer; color:#4b5563;">
+                  📄 View Steps ({msg.logs.length})
+                </button>
+              </div>
+            {/if}
+          {/if}
+        </div>
+      </div>
+    {/each}
+  </div>
+
+  <div class="input-area">
+    <div class="attachment-box">
+      <div class="attachment-action-bar">
+        <div>
+          <input type="file" bind:this={fileInput} multiple hidden onchange={handleFileSelect} />
+          <button class="attach-chip-btn" onclick={() => fileInput.click()} aria-label="Attach File" title={t("chat.attachment")}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+            {t("chat.attachment")}
+          </button>
+        </div>
+        <div>
+          {#if appState.messages.length > 1}
+            <button class="clear-chat-thin-btn" onclick={wipeChat} aria-label="Wipe Chat" title="대화 내역 지우기">
+              Clear
+            </button>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Attachment Preview Area -->
+      {#if appState.attachedFiles.length > 0}
+        <div class="attachment-preview-container">
+          {#if appState.isAttachListMinimized}
+            <button class="minimize-btn" onclick={() => appState.isAttachListMinimized = false}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+              첨부된 파일 {appState.attachedFiles.length}개
+            </button>
+          {:else}
+            <div class="attachment-header">
+              <span class="attachment-label">첨부 대기 중인 파일 ({appState.attachedFiles.length})</span>
+              <button class="icon-btn-small" onclick={() => appState.isAttachListMinimized = true} title="최소화">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
+            <div class="attachment-list">
+              {#each appState.attachedFiles as file, index}
+                <div class="attachment-item">
+                  {#if file.type === 'image'}
+                    <svg class="file-icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                  {:else}
+                    <svg class="file-icon-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  {/if}
+                  <div class="file-name" title={file.name}>{file.name}</div>
+                  <button class="remove-btn" onclick={() => removeFile(index)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <div class="input-wrapper">
+      {#if isVoiceMode}
+        <button 
+          class="voice-ptt-btn {isRecording ? 'recording' : ''}"
+          onmousedown={startVoiceInput}
+          onmouseup={stopVoiceInputAndSend}
+          onmouseleave={() => { if(isRecording) stopVoiceInputAndSend(); }}
+          ontouchstart={(e) => { e.preventDefault(); startVoiceInput(); }}
+          ontouchend={(e) => { e.preventDefault(); stopVoiceInputAndSend(); }}
+        >
+          {isRecording ? "손을 떼면 전송 (듣는 중...)" : "누르고 말하기"}
+        </button>
+      {:else}
+        <input
+          class="main-input"
+          type="text"
+          placeholder={t("chat.placeholder")}
+          bind:value={appState.query}
+          disabled={appState.isThinking}
+          onkeydown={(e) => {
+            if (e.key === "Tab" && e.shiftKey) {
+              e.preventDefault();
+              appState.config.useMultiAgentWorkflow = !appState.config.useMultiAgentWorkflow;
+              return;
+            }
+            if (e.key === "Enter" && !appState.isThinking) submitQuery();
+          }}
+        />
+      {/if}
+      
+      <div class="input-actions">
+        {#if appState.isThinking}
+          <button
+            class="icon-btn stop-btn"
+            onclick={stopAgent}
+            aria-label="Stop Agent"
+            title={t("chat.stop")}>⛔</button
+          >
+        {:else}
+          <button class="icon-btn toggle-voice-btn" onclick={() => isVoiceMode = !isVoiceMode} title={t("chat.toggleVoice")}>
+            {isVoiceMode ? '⌨️' : '🎙️'}
+          </button>
+          {#if !isVoiceMode}
+            <button class="icon-btn send-btn" onclick={submitQuery} title={t("chat.send")} style="color:#1a1a1a;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" fill="#1a1a1a" stroke="#1a1a1a"></circle>
+                <path d="M12 16V8" stroke="#f5f3ed"></path>
+                <path d="M8 12l4-4 4 4" stroke="#f5f3ed"></path>
+              </svg>
+            </button>
+          {/if}
+        {/if}
+      </div>
+    </div>
+
+    <div class="status-bar" style="display:flex; justify-content:space-between; margin-top:8px; font-size:0.8rem; color:#6b7280; font-weight:600;">
+      <div>
+        <span>Mode: <span style="color:#1a1a1a;">{appState.config.useMultiAgentWorkflow ? "Multi-Agent (Accuracy)" : "Single (Fast)"}</span></span>
+        <span style="margin-left:8px; opacity:0.7;">(Shift+Tab to switch)</span>
+        <span style="margin-left:12px;">Max Loops: {appState.config.maxLoops}</span>
+      </div>
+      <div>
+        {#if appState.isThinking}
+          <span style="color:#e0005a; animation:pulse 1s infinite alternate;">Elapsed: {appState.elapsedSec}s</span>
+        {/if}
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Zero Border Radius, High Contrast Line */
+  .chat-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f5f3ed;
+    border-right: 1px solid #1a1a1a;
+    z-index: 10;
+    position: relative;
+  }
+
+  .header-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .chat-header {
+    padding: 16px 28px;
+    background: #f5f3ed;
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .chat-header h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+
+  .settings-toggle,
+  .toggle-btn {
+    background: transparent;
+    border: 1px solid #1a1a1a;
+    padding: 6px 14px;
+    border-radius: 0; /* Anti-pattern: standard heavily rounded components */
+    color: #1a1a1a;
+    cursor: pointer;
+    font-family: "Inter", sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    transition: all 0.2s ease;
+  }
+  .settings-toggle:hover,
+  .toggle-btn:hover {
+    background: #1a1a1a;
+    color: #f5f3ed;
+  }
+
+  .chat-box {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    scroll-behavior: smooth;
+  }
+
+  .message {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    max-width: 85%;
+    animation: fadeIn 0.3s ease-out;
+  }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .message.user {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+  }
+
+  .avatar {
+    font-size: 1.1rem;
+    background: #fcfbf8;
+    border: 1px solid #1a1a1a;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0;
+    flex-shrink: 0;
+    color: #1a1a1a;
+  }
+
+  .bubble {
+    background: transparent;
+    padding: 0;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: #1a1a1a;
+  }
+  .message.user .bubble {
+    background: #ebe8de;
+    border: 1px solid #1a1a1a;
+    color: #1a1a1a;
+    border-radius: 0;
+    padding: 8px 16px;
+    line-height: 1.4;
+  }
+  .message.assistant .bubble {
+    width: 100%;
+  }
+  
+  /* Remove default paragraph margins inside all bubbles to prevent unwanted vertical stretching */
+  .bubble :global(p) { margin: 0; }
+  .bubble :global(p:not(:last-child)) { margin-bottom: 12px; }
+
+  .badges-row {
+    display: flex;
+    gap: 8px;
+    padding: 0 28px 16px 28px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    background: #f5f3ed;
+  }
+  .badges-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sys-badge {
+    flex-shrink: 0;
+    background: #fcfbf8;
+    border: 1px solid #1a1a1a;
+    padding: 6px 16px;
+    border-radius: 0;
+    color: #1a1a1a;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  /* Impeccable Accent Color on Hover */
+  .sys-badge:hover {
+    background: #e0005a;
+    color: #fcfbf8;
+    border-color: #e0005a;
+  }
+
+  .input-area {
+    position: relative;
+    padding: 12px 16px;
+    background: #f5f3ed;
+    border-top: none;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+  }
+  .input-wrapper {
+    display: flex;
+    flex: 1;
+    background: #ebe8de;
+    border-radius: 24px;
+    padding: 6px 12px 6px 20px;
+    align-items: center;
+    transition: background 0.2s ease;
+  }
+  .input-wrapper:focus-within {
+    background: #fcfbf8;
+    box-shadow: inset 0 0 0 1px #1a1a1a;
+  }
+
+  .attachment-box {
+    margin-bottom: 8px;
+    padding: 0 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .attachment-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .attach-chip-btn {
+    background: transparent;
+    border: 1px solid #d4d4d8;
+    color: #4b5563;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s;
+  }
+  .attach-chip-btn:hover {
+    background: #e5e7eb;
+    color: #1a1a1a;
+  }
+  .clear-chat-thin-btn {
+    background: transparent;
+    border: 1px solid #e0005a;
+    color: #e0005a;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .clear-chat-thin-btn:hover {
+    background: #e0005a;
+    color: #fff;
+  }
+
+  .attachment-preview-container {
+    background: #fff;
+    border: 1px solid #d4d4d8;
+    border-radius: 16px;
+    padding: 12px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  }
+  .minimize-btn {
+    background: #f3f4f6;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: #374151;
+    transition: background 0.2s;
+  }
+  .minimize-btn:hover {
+    background: #e5e7eb;
+  }
+  .attachment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .attachment-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .icon-btn-small {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    transition: color 0.2s;
+  }
+  .icon-btn-small:hover { color: #1a1a1a; }
+  
+  .attachment-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .attachment-item {
+    display: flex;
+    align-items: center;
+    background: #f3f4f6;
+    border: 1px solid transparent;
+    padding: 6px 10px 6px 12px;
+    border-radius: 12px;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: #1f2937;
+    max-width: 220px;
+    transition: all 0.2s;
+  }
+  .attachment-item:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+  }
+  .file-icon-svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: #6b7280;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+  .file-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    font-weight: 500;
+  }
+  .remove-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #d1d5db;
+    border: none;
+    cursor: pointer;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: #4b5563;
+    padding: 0;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .remove-btn:hover {
+    background: #ef4444;
+    color: #fff;
+  }
+
+  .input-area input.main-input {
+    flex: 1;
+    padding: 12px 0;
+    border: none;
+    background: transparent;
+    color: #1a1a1a;
+    font-size: 1.05rem;
+  }
+  .input-area input.main-input:focus {
+    outline: none;
+  }
+
+  .voice-ptt-btn {
+    flex: 1;
+    padding: 12px 0;
+    margin: 0 8px;
+    border: none;
+    background: transparent;
+    color: #1a1a1a;
+    font-size: 1.05rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: background 0.2s, color 0.2s;
+  }
+  .voice-ptt-btn:hover {
+    background: #d4d4d8;
+  }
+  .voice-ptt-btn.recording {
+    background: #1a1a1a;
+    color: #f5f3ed;
+  }
+
+  .input-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .input-actions .icon-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.3rem;
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      background 0.2s ease,
+      opacity 0.2s ease;
+    opacity: 0.75;
+  }
+  .input-actions .icon-btn:hover {
+    background: #d4d4d8;
+    opacity: 1;
+  }
+  .input-actions .stop-btn {
+    opacity: 1;
+  }
+  @keyframes pulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+  }
+
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-content {
+    background: #fff;
+    width: 600px;
+    max-width: 90vw;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+</style>

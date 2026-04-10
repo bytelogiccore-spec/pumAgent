@@ -1,0 +1,59 @@
+use std::fs;
+use std::os::windows::process::CommandExt;
+use std::path::PathBuf;
+use std::process::Command;
+
+pub struct TerminalTool {
+    work_dir: PathBuf,
+}
+
+impl TerminalTool {
+    pub fn new(mut work_dir: PathBuf) -> Self {
+        // Ensure "Work" directory exists relative to base_dir
+        work_dir.push("Work");
+
+        if !work_dir.exists() {
+            let _ = fs::create_dir_all(&work_dir);
+        }
+
+        TerminalTool { work_dir }
+    }
+
+    pub fn execute(&self, cmd_string: &str) -> Result<String, String> {
+        // We use powershell to run the command on Windows
+        // The sandbox relies on setting the current_dir.
+        // Note: For absolute security, docker is needed, but this prevents accidental operations.
+
+        let create_no_window = 0x08000000;
+
+        // Timeout handling or long running process handling could be added later
+        let output = Command::new("powershell")
+            .arg("-Command")
+            .arg(cmd_string)
+            .current_dir(&self.work_dir)
+            .creation_flags(create_no_window)
+            .output()
+            .map_err(|e| format!("Failed to execute command: {}", e))?;
+
+        let mut out_str = String::from_utf8_lossy(&output.stdout).to_string();
+        let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if !err_str.trim().is_empty() {
+            out_str.push_str("\n[STDERR]\n");
+            out_str.push_str(&err_str);
+        }
+
+        if !output.status.success() {
+            return Err(format!(
+                "Command exited with status: {}\nOutput: {}",
+                output.status, out_str
+            ));
+        }
+
+        if out_str.trim().is_empty() {
+            return Ok("Command executed successfully with no output.".to_string());
+        }
+
+        Ok(out_str)
+    }
+}
