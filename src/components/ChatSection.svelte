@@ -69,8 +69,10 @@
     if (textareaElement && typeof appState.query === "string") {
       tick().then(() => {
         if (textareaElement) {
-          textareaElement.style.height = 'auto';
-          textareaElement.style.height = Math.min(textareaElement.scrollHeight, 200) + 'px';
+          textareaElement.style.height = '25px';
+          let newHeight = Math.min(Math.max(textareaElement.scrollHeight, 25), 200);
+          textareaElement.style.height = newHeight + 'px';
+          textareaElement.style.overflow = textareaElement.scrollHeight > 200 ? 'auto' : 'hidden';
         }
       });
     }
@@ -309,7 +311,7 @@
           bind:value={appState.query}
           disabled={appState.isThinking}
           rows="1"
-          style="resize: none; overflow-y: auto; max-height: 200px;"
+          style="resize: none; overflow: hidden; max-height: 200px;"
           onkeydown={(e) => {
             if (e.key === "Tab" && e.shiftKey) {
               e.preventDefault();
@@ -696,14 +698,16 @@
 
   .input-area .main-input {
     flex: 1;
-    padding: 4px 0;
-    margin: 8px 0;
+    padding: 0;
+    margin: 0;
+    height: 25px;
+    min-height: 25px;
     border: none;
     background: transparent;
     color: #1a1a1a;
     font-size: 1.05rem;
     font-family: inherit;
-    line-height: 1.5;
+    line-height: 25px;
   }
   .input-area .main-input:focus {
     outline: none;
