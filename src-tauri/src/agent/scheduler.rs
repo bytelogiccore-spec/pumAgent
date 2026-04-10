@@ -134,6 +134,7 @@ impl Scheduler {
             let _ = self
                 .db
                 .insert("knowledge_base", key.as_bytes(), content.as_bytes());
+            let _ = self.db.flush();
         }
     }
 }

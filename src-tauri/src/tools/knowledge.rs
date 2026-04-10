@@ -64,7 +64,10 @@ impl KnowledgeTool {
             .db
             .insert("knowledge_base", key.as_bytes(), content.as_bytes())
         {
-            Ok(_) => Ok(format!("Successfully wrote {} to {}.", name, domain)),
+            Ok(_) => {
+                let _ = self.db.flush();
+                Ok(format!("Successfully wrote {} to {}.", name, domain))
+            }
             Err(e) => Err(format!("Failed to write {}: {}", key, e)),
         }
     }
@@ -72,7 +75,10 @@ impl KnowledgeTool {
     pub fn delete(&self, domain: &str, name: &str) -> Result<String, String> {
         let key = self.resolve_key(domain, name)?;
         match self.db.delete("knowledge_base", key.as_bytes()) {
-            Ok(_) => Ok(format!("Successfully deleted {} from {}.", name, domain)),
+            Ok(_) => {
+                let _ = self.db.flush();
+                Ok(format!("Successfully deleted {} from {}.", name, domain))
+            }
             Err(e) => Err(format!("Failed to delete {}: {}", key, e)),
         }
     }

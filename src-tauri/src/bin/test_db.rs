@@ -27,13 +27,10 @@ fn main() {
     println!("--- knowledge_base ---");
     if let Ok(entries) = db.scan("knowledge_base") {
         for (k, v) in entries {
-            println!("Key: {:?} (len: {}) => Val len: {}", k, k.len(), v.len());
-            if let Ok(s) = String::from_utf8(k) {
-                println!("  String Key: '{}'", s);
-                println!(
-                    "  Get test: {}",
-                    db.get("knowledge_base", s.as_bytes()).unwrap().is_some()
-                );
+            if let Ok(s) = String::from_utf8(k.clone()) {
+                if s.starts_with("schedules") {
+                    println!("--- KEY: {} ---\n{}\n", s, String::from_utf8_lossy(&v));
+                }
             }
         }
     }

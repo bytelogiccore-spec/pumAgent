@@ -52,17 +52,23 @@ impl BrainTool {
             .db
             .insert("brain_artifacts", safe_name.as_bytes(), content.as_bytes())
         {
-            Ok(_) => Ok(format!(
-                "Brain artifact '{}' successfully written/updated in DB.",
-                safe_name
-            )),
+            Ok(_) => {
+                let _ = self.db.flush();
+                Ok(format!(
+                    "Brain artifact '{}' successfully written/updated in DB.",
+                    safe_name
+                ))
+            }
             Err(e) => Err(format!("Failed to write artifact '{}': {}", safe_name, e)),
         }
     }
 
     pub fn delete_artifact(&self, name: &str) -> Result<(), String> {
         match self.db.delete("brain_artifacts", name.as_bytes()) {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                let _ = self.db.flush();
+                Ok(())
+            }
             Err(e) => Err(format!("Failed to delete artifact '{}': {}", name, e)),
         }
     }
