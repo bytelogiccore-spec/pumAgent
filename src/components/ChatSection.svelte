@@ -63,6 +63,18 @@
   function removeFile(index: number) {
      appState.attachedFiles = appState.attachedFiles.filter((_, i) => i !== index);
   }
+
+  let textareaElement: HTMLTextAreaElement | null = $state(null);
+  $effect(() => {
+    if (textareaElement && typeof appState.query === "string") {
+      tick().then(() => {
+        if (textareaElement) {
+          textareaElement.style.height = 'auto';
+          textareaElement.style.height = Math.min(textareaElement.scrollHeight, 200) + 'px';
+        }
+      });
+    }
+  });
   $effect(() => {
     if (appState.messages) {
       scrollToBottom();
@@ -290,21 +302,26 @@
           {isRecording ? "손을 떼면 전송 (듣는 중...)" : "누르고 말하기"}
         </button>
       {:else}
-        <input
+        <textarea
+          bind:this={textareaElement}
           class="main-input"
-          type="text"
           placeholder={t("chat.placeholder")}
           bind:value={appState.query}
           disabled={appState.isThinking}
+          rows="1"
+          style="resize: none; overflow-y: auto; max-height: 200px;"
           onkeydown={(e) => {
             if (e.key === "Tab" && e.shiftKey) {
               e.preventDefault();
               appState.config.useMultiAgentWorkflow = !appState.config.useMultiAgentWorkflow;
               return;
             }
-            if (e.key === "Enter" && !appState.isThinking) submitQuery();
+            if (e.key === "Enter" && !e.shiftKey && !appState.isThinking) {
+              e.preventDefault();
+              submitQuery();
+            }
           }}
-        />
+        ></textarea>
       {/if}
       
       <div class="input-actions">
@@ -677,15 +694,17 @@
     color: #fff;
   }
 
-  .input-area input.main-input {
+  .input-area .main-input {
     flex: 1;
     padding: 12px 0;
     border: none;
     background: transparent;
     color: #1a1a1a;
     font-size: 1.05rem;
+    font-family: inherit;
+    line-height: 1.5;
   }
-  .input-area input.main-input:focus {
+  .input-area .main-input:focus {
     outline: none;
   }
 
