@@ -18,7 +18,7 @@ PumAgent is an autonomous intelligence desktop application built with a **Rust (
 ## 🌟 Key Features
 
 - **Autonomous Agent Loop**: Robust `Goal-Reason-Action-Observe-Finish` architecture that guarantees the completion of tasks without requiring constant human intervention.
-- **Persistent Memory & Data**: Real-time integration and persistence via local SQLite backed by our highly robust `DBX-Core` database engine. Supports extensive "Brain" artifacts and customizable Knowledge Bases.
+- **Persistent Memory & Data**: Real-time integration and persistence are powered by our highly robust custom `DBX-Core` native Key-Value database engine. Supports extensive "Brain" artifacts and customizable Knowledge Bases.
 - **Web Meta-Search & Scraping**: Multi-layered search integration utilizing APIs from Tavily and Google Custom Search, falling back to seamless DuckDuckGo & Yahoo headless web scraping when limits are reached.
 - **Proactive Telegram Integration**: Bind the agent directly to your Telegram device for real-time mobile push notifications, alerts, and interaction on-the-go.
 - **Automated Scheduler**: Robust interval polling and chronicler loops utilizing CRON schedules, allowing the agent to continuously monitor news, market data, and internal systems in the background.
@@ -28,7 +28,7 @@ PumAgent is an autonomous intelligence desktop application built with a **Rust (
 
 1. **Frontend**: [Svelte 5](https://svelte.dev/) + [Vite](https://vitejs.dev/) + [TypeScript](https://www.typescriptlang.org/)
 2. **Backend**: [Rust](https://www.rust-lang.org/) + [Tauri](https://tauri.app/)
-3. **Database**: SQLite powered locally by `DBX-Core`
+3. **Database**: High-performance Key-Value storage via `DBX-Core`
 4. **Third-Party Providers**:
    - Local Inference via Ollama / Text-generation-webui
    - External LLMs (OpenAI, Gemini Support via dynamic LLM client)

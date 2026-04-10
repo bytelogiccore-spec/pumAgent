@@ -18,7 +18,7 @@ PumAgent는 **Rust (Tauri)** 엔진과 **Svelte / TypeScript** 프론트엔드�
 ## 🌟 주요 기능
 
 - **자율 에이전트 루프**: 사람의 지속적인 개입 없이 스스로 계획하고 작업을 완수하는 강력한 `목표-추론-행동-관찰-완료(Goal-Reason-Action-Observe-Finish)` 아키텍처.
-- **지속성 메모리 및 데이터**: 고성능 `DBX-Core` 로컬 데이터베이스 엔진 기반의 SQLite 스토리지로 실시간 데이터 통합 및 지속성을 유지합니다. 방대한 "Brain" 아티팩트와 사용자 정의 지식 기반(Knowledge Base)을 지원합니다.
+- **지속성 메모리 및 데이터**: 고성능 `DBX-Core` 로컬 Key-Value 데이터베이스 스토리지로 실시간 데이터 통합 및 지속성을 유지합니다. 방대한 "Brain" 아티팩트와 사용자 정의 지식 기반(Knowledge Base)을 지원합니다.
 - **웹 메타 검색 및 크롤링**: Tavily 및 Google Custom Search API를 활용하는 다층 검색 통합 로직. 트래픽 한도 초과 시 DuckDuckGo 및 Yahoo 헤드리스 웹 스크래핑으로 자동 전환됩니다.
 - **선제적 텔레그램 통합**: 에이전트를 사용자의 모바일 텔레그램 기기와 직접 연동하여 실시간 푸시 알림, 경고 및 원격 제어 인터랙션을 제공합니다.
 - **자동화 스케줄러**: CRON 스케줄을 활용한 안정적인 간격 폴링(Interval Polling) 루프를 통해 에이전트가 백그라운드 환경에서 지속적으로 최신 뉴스, 시장 데이터 및 내부 시스템을 모니터링할 수 있게 합니다.
@@ -28,7 +28,7 @@ PumAgent는 **Rust (Tauri)** 엔진과 **Svelte / TypeScript** 프론트엔드�
 
 1. **프론트엔드**: [Svelte 5](https://svelte.dev/) + [Vite](https://vitejs.dev/) + [TypeScript](https://www.typescriptlang.org/)
 2. **백엔드**: [Rust](https://www.rust-lang.org/) + [Tauri](https://tauri.app/)
-3. **데이터베이스**: 로컬 환경에서 동작하는 `DBX-Core` 기반 SQLite
+3. **데이터베이스**: 로컬 환경에서 독자적으로 동작하는 `DBX-Core` Key-Value 스토리지
 4. **외부 서비스 연동**:
    - Ollama / Text-generation-webui를 활용한 로컬 모델 추론
    - 외부 외부 대형 언어 모델 (동적 LLM 컴포넌트를 통한 OpenAI, Gemini 등 지원)
