@@ -1,47 +1,67 @@
-# Svelte + TS + Vite
+### 💖 Support This Project
+If you find PumAgent useful, please consider supporting its development!
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+[<img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="ko-fi" height="36">](https://ko-fi.com/YOUR_KO_FI_LINK)
 
-## Recommended IDE Setup
+Your support helps with:
+- 🚀 New features and performance optimizations
+- 🐛 Bug fixes and stability improvements
+- 📚 Documentation and tutorials
+- 💻 Test infrastructure and CI/CD maintenance
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+# PumAgent 🤖
 
-## Need an official Svelte framework?
+PumAgent is an autonomous intelligence desktop application built with a **Rust (Tauri)** engine and a **Svelte / TypeScript** frontend. Designed for speed, privacy, and continuous capability, PumAgent orchestrates complex agentic workflows, empowering you with a personal AI that can run directly on your machine.
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+---
 
-## Technical considerations
+## 🌟 Key Features
 
-**Why use this over SvelteKit?**
+- **Autonomous Agent Loop**: Robust `Goal-Reason-Action-Observe-Finish` architecture that guarantees the completion of tasks without requiring constant human intervention.
+- **Persistent Memory & Data**: Real-time integration and persistence via local SQLite backed by our highly robust `DBX-Core` database engine. Supports extensive "Brain" artifacts and customizable Knowledge Bases.
+- **Web Meta-Search & Scraping**: Multi-layered search integration utilizing APIs from Tavily and Google Custom Search, falling back to seamless DuckDuckGo & Yahoo headless web scraping when limits are reached.
+- **Proactive Telegram Integration**: Bind the agent directly to your Telegram device for real-time mobile push notifications, alerts, and interaction on-the-go.
+- **Automated Scheduler**: Robust interval polling and chronicler loops utilizing CRON schedules, allowing the agent to continuously monitor news, market data, and internal systems in the background.
+- **Cross-Platform Readiness**: Designed and optimized natively for Windows, macOS, and Linux thanks to the lightweight Tauri footprint.
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+## 🛠️ Technology Stack
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+1. **Frontend**: [Svelte 5](https://svelte.dev/) + [Vite](https://vitejs.dev/) + [TypeScript](https://www.typescriptlang.org/)
+2. **Backend**: [Rust](https://www.rust-lang.org/) + [Tauri](https://tauri.app/)
+3. **Database**: SQLite powered locally by `DBX-Core`
+4. **Third-Party Providers**:
+   - Local Inference via Ollama / Text-generation-webui
+   - External LLMs (OpenAI, Gemini Support via dynamic LLM client)
+   - Search Meta-APIs & Native Web Crawling
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+## 🚀 Getting Started
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+### Prerequisites
+- Node.js (v18+)
+- Rust & Cargo (1.77.2+)
+- Visual Studio / C++ Build Tools (Specifically for Windows native modules)
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+### Installation
+1. Clone the repository
+   ```bash
+   git clone https://github.com/bytelogiccore-spec/pumAgent.git
+   cd pumAgent
+   ```
+2. Install frontend dependencies
+   ```bash
+   npm install
+   ```
+3. Run the application in development mode
+   ```bash
+   npm run tauri dev
+   ```
 
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+### Building for Production
+To compile the standalone desktop application, run:
+```bash
+npm run tauri build
 ```
+Once complete, your installer or executable will be available within the `src-tauri/target/release/bundle` directory.
+
+## 📄 License
+This project is licensed under the **MIT License**. Check the [LICENSE](LICENSE) file for more information. Details regarding Third-Party Licenses can be found in [THIRDPARTY-LICENSES.md](THIRDPARTY-LICENSES.md).
