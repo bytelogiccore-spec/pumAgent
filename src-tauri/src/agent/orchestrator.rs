@@ -247,6 +247,12 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                     .send(format!(" -> [{}.{}] {}", r.tool_name, r.action, status))
                     .await;
 
+                if r.ok && (r.action == "write" || r.action == "write_artifact") && (r.tool_name == "brain" || r.tool_name == "knowledge") {
+                    let _ = log_tx
+                        .send(format!("[DB 저장 이벤트] 💾 {} 도구를 통해 데이터베이스에 저장이 완료되었습니다.", r.tool_name))
+                        .await;
+                }
+
                 result_summary_md.push_str(&format!(
                     "**Tool**: {}.{}\n**Status**: {}\n**Output**:\n{}\n\n---\n",
                     r.tool_name, r.action, status, r.output
@@ -561,6 +567,13 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 let _ = log_tx
                     .send(format!(" -> [{}.{}] {}", r.tool_name, r.action, status))
                     .await;
+                
+                if r.ok && (r.action == "write" || r.action == "write_artifact") && (r.tool_name == "brain" || r.tool_name == "knowledge") {
+                    let _ = log_tx
+                        .send(format!("[DB 저장 이벤트] 💾 {} 도구를 통해 데이터베이스에 저장이 완료되었습니다.", r.tool_name))
+                        .await;
+                }
+
                 result_summary_md.push_str(&format!(
                     "**Tool**: {}.{}\n**Status**: {}\n**Output**:\n{}\n\n---\n",
                     r.tool_name, r.action, status, r.output
@@ -722,7 +735,16 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
             .await;
 
         // Execute the tools
-        let _results = self.multi_agent.execute_tools(tool_calls).await;
+        let results = self.multi_agent.execute_tools(tool_calls).await;
+        
+        for r in results {
+            if r.ok && (r.action == "write" || r.action == "write_artifact") && (r.tool_name == "brain" || r.tool_name == "knowledge") {
+                let _ = log_tx
+                    .send(format!("[DB 저장 백그라운드] 💾 {} 도구를 통해 데이터가 병합되었습니다.", r.tool_name))
+                    .await;
+            }
+        }
+
         // Optionally, log results
         let _ = log_tx
             .send("[Reflector] 백그라운드 회고 저장을 완료했습니다.".to_string())

@@ -30,7 +30,3 @@ Cargo.lock
 
 # Data
 PumAgentData/
-*.db
-*.sqlite
-*.sqlite-wal
-*.sqlite-shm
