@@ -696,7 +696,8 @@
 
   .input-area .main-input {
     flex: 1;
-    padding: 12px 0;
+    padding: 4px 0;
+    margin: 8px 0;
     border: none;
     background: transparent;
     color: #1a1a1a;
