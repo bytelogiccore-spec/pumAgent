@@ -1,0 +1,40 @@
+﻿├─ @tauri-apps/api@2.10.1
+│  ├─ licenses: Apache-2.0 OR MIT
+│  ├─ repository: https://github.com/tauri-apps/tauri
+│  ├─ path: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@tauri-apps\api
+│  └─ licenseFile: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@tauri-apps\api\README.md
+├─ @types/dompurify@3.0.5
+│  ├─ licenses: MIT
+│  ├─ repository: https://github.com/DefinitelyTyped/DefinitelyTyped
+│  ├─ path: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@types\dompurify
+│  └─ licenseFile: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@types\dompurify\LICENSE
+├─ @types/marked@5.0.2
+│  ├─ licenses: MIT
+│  ├─ repository: https://github.com/DefinitelyTyped/DefinitelyTyped
+│  ├─ path: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@types\marked
+│  └─ licenseFile: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@types\marked\LICENSE
+├─ @types/trusted-types@2.0.7
+│  ├─ licenses: MIT
+│  ├─ repository: https://github.com/DefinitelyTyped/DefinitelyTyped
+│  ├─ path: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@types\trusted-types
+│  └─ licenseFile: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\@types\trusted-types\LICENSE
+├─ dompurify@3.3.3
+│  ├─ licenses: (MPL-2.0 OR Apache-2.0)
+│  ├─ repository: https://github.com/cure53/DOMPurify
+│  ├─ publisher: Dr.-Ing. Mario Heiderich, Cure53
+│  ├─ email: mario@cure53.de
+│  ├─ url: https://cure53.de/
+│  ├─ path: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\dompurify
+│  └─ licenseFile: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\dompurify\LICENSE
+├─ marked@18.0.0
+│  ├─ licenses: MIT
+│  ├─ repository: https://github.com/markedjs/marked
+│  ├─ publisher: Christopher Jeffrey
+│  ├─ path: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\marked
+│  └─ licenseFile: D:\ByteLogicCore\AI\PumAgent_Rust\node_modules\marked\LICENSE.md
+└─ pumagent-rust@0.0.0
+   ├─ licenses: UNLICENSED
+   ├─ private: true
+   ├─ path: D:\ByteLogicCore\AI\PumAgent_Rust
+   └─ licenseFile: D:\ByteLogicCore\AI\PumAgent_Rust\LICENSE
+
