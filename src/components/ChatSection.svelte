@@ -90,7 +90,7 @@
     }
   }
 
-  let isVoiceMode = $state(false);
+  // removed isVoiceMode
   let isRecording = $state(false);
   let recognitionRef: any = null;
 
@@ -142,15 +142,9 @@
     recognition.start();
   }
 
-  function stopVoiceInputAndSend() {
+  function stopVoiceInput() {
     if (recognitionRef && isRecording) {
       recognitionRef.stop();
-      // Allow a brief moment for the final `onresult` to process before submitting
-      setTimeout(() => {
-        if (appState.query.trim() !== "") {
-          submitQuery();
-        }
-      }, 300);
     }
   }
 
@@ -292,18 +286,6 @@
     </div>
 
     <div class="input-wrapper">
-      {#if isVoiceMode}
-        <button 
-          class="voice-ptt-btn {isRecording ? 'recording' : ''}"
-          onmousedown={startVoiceInput}
-          onmouseup={stopVoiceInputAndSend}
-          onmouseleave={() => { if(isRecording) stopVoiceInputAndSend(); }}
-          ontouchstart={(e) => { e.preventDefault(); startVoiceInput(); }}
-          ontouchend={(e) => { e.preventDefault(); stopVoiceInputAndSend(); }}
-        >
-          {isRecording ? "손을 떼면 전송 (듣는 중...)" : "누르고 말하기"}
-        </button>
-      {:else}
         <textarea
           bind:this={textareaElement}
           class="main-input"
@@ -324,9 +306,8 @@
             }
           }}
         ></textarea>
-      {/if}
       
-      <div class="input-actions">
+      <div class="input-actions" style="align-self: flex-end; margin-bottom: 4px;">
         {#if appState.isThinking}
           <button
             class="icon-btn stop-btn"
@@ -335,18 +316,16 @@
             title={t("chat.stop")}>⛔</button
           >
         {:else}
-          <button class="icon-btn toggle-voice-btn" onclick={() => isVoiceMode = !isVoiceMode} title={t("chat.toggleVoice")}>
-            {isVoiceMode ? '⌨️' : '🎙️'}
+          <button class="icon-btn toggle-voice-btn" class:recording={isRecording} onclick={() => { if(isRecording) stopVoiceInput(); else startVoiceInput(); }} title="음성 입력">
+            {isRecording ? '🛑' : '🎙️'}
           </button>
-          {#if !isVoiceMode}
-            <button class="icon-btn send-btn" onclick={submitQuery} title={t("chat.send")} style="color:#1a1a1a;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" fill="#1a1a1a" stroke="#1a1a1a"></circle>
-                <path d="M12 16V8" stroke="#f5f3ed"></path>
-                <path d="M8 12l4-4 4 4" stroke="#f5f3ed"></path>
-              </svg>
-            </button>
-          {/if}
+          <button class="icon-btn send-btn" onclick={submitQuery} title={t("chat.send")} style="color:#1a1a1a;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" fill="#1a1a1a" stroke="#1a1a1a"></circle>
+              <path d="M12 16V8" stroke="#f5f3ed"></path>
+              <path d="M8 12l4-4 4 4" stroke="#f5f3ed"></path>
+            </svg>
+          </button>
         {/if}
       </div>
     </div>
@@ -534,7 +513,7 @@
     background: #ebe8de;
     border-radius: 24px;
     padding: 6px 12px 6px 20px;
-    align-items: center;
+    align-items: flex-end;
     transition: background 0.2s ease;
   }
   .input-wrapper:focus-within {
@@ -699,7 +678,7 @@
   .input-area .main-input {
     flex: 1;
     padding: 0;
-    margin: 0;
+    margin: 8px 0;
     height: 25px;
     min-height: 25px;
     border: none;
@@ -732,6 +711,11 @@
   .voice-ptt-btn.recording {
     background: #1a1a1a;
     color: #f5f3ed;
+  }
+
+  .toggle-voice-btn.recording {
+    color: #ef4444;
+    animation: pulse 1s infinite alternate;
   }
 
   .input-actions {
