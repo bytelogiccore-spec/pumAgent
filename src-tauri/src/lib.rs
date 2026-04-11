@@ -26,10 +26,12 @@ use tools::terminal::TerminalTool;
 pub fn run() {
     tauri::Builder::default()
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
                 if let Some(state) = window.try_state::<AgentState>() {
                     let _ = state.db.flush();
-                    println!("[PumAgent] Window closing, performed DB flush for safety.");
+                    println!("[PumAgent] Window minimized to tray, performed DB flush for safety.");
                 }
             }
         })
@@ -146,6 +148,48 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
 
+            // Setup Tray Icon & Menu
+            let heartbeat_item = tauri::menu::MenuItemBuilder::with_id("heartbeat", "HeartBeat 실행 시간: -").enabled(false).build(app)?;
+            let maximize_item = tauri::menu::MenuItemBuilder::with_id("maximize", "최대화").build(app)?;
+            let quit_item = tauri::menu::MenuItemBuilder::with_id("quit", "종료").build(app)?;
+
+            let menu = tauri::menu::MenuBuilder::new(app)
+                .item(&heartbeat_item)
+                .item(&maximize_item)
+                .item(&quit_item)
+                .build()?;
+
+            let _tray = tauri::tray::TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .on_menu_event(move |app, event| match event.id().as_ref() {
+                    "quit" => {
+                        std::process::exit(0);
+                    }
+                    "maximize" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            let heartbeat_item_clone = heartbeat_item.clone();
+
             let initial_config = AppConfig::load(&base_dir);
             if initial_config.telegram_enabled && !initial_config.telegram_bot_token.is_empty() {
                 let ma_clone = multi_agent_ref.clone();
@@ -172,6 +216,7 @@ pub fn run() {
                         let elapsed = last_tick.elapsed().as_secs();
                         let remaining = config.heartbeat_interval.saturating_sub(elapsed);
                         let _ = app_handle.emit("heartbeat_progress", remaining);
+                        let _ = heartbeat_item_clone.set_text(format!("HeartBeat 실행 시간: {}초 남음", remaining));
 
                         if elapsed >= config.heartbeat_interval {
                             last_tick = tokio::time::Instant::now();
@@ -180,6 +225,7 @@ pub fn run() {
                     } else {
                         last_tick = tokio::time::Instant::now();
                         let _ = app_handle.emit("heartbeat_progress", 0u64);
+                        let _ = heartbeat_item_clone.set_text("HeartBeat 실행 시간: 비활성화");
                     }
                 }
             });
@@ -192,6 +238,7 @@ pub fn run() {
             commands::agent::compress_memory,
             commands::agent::load_config,
             commands::agent::save_config,
+            commands::agent::test_llm_connection,
             commands::fs::list_brain_artifacts,
             commands::fs::read_brain_artifact,
             commands::fs::write_brain_artifact,

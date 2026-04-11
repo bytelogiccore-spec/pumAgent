@@ -385,3 +385,22 @@ pub async fn translate_i18n(
 
     Ok(result_json)
 }
+
+#[tauri::command]
+pub async fn test_llm_connection(
+    api_url: String,
+    model: String,
+    api_key: String,
+) -> Result<String, String> {
+    let client = LLMClient::new(api_url, model, api_key);
+    let msg = vec![ChatMessage {
+        role: "user".to_string(),
+        content: "Ping!".to_string(),
+        images_base64: None,
+    }];
+    
+    match client.chat(&msg, 0.5).await {
+        Ok(_) => Ok("Connection successful".to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
