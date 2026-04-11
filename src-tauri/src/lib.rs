@@ -150,8 +150,7 @@ pub fn run() {
 
             // Setup Tray Icon & Menu
             let heartbeat_item =
-                tauri::menu::MenuItemBuilder::with_id("heartbeat", "❤️ -")
-                    .build(app)?;
+                tauri::menu::MenuItemBuilder::with_id("heartbeat", "❤️ -").build(app)?;
             let maximize_item =
                 tauri::menu::MenuItemBuilder::with_id("maximize", "Maximize").build(app)?;
             let quit_item = tauri::menu::MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -230,8 +229,8 @@ pub fn run() {
                                 format!("{:02}:{:02}", m, s)
                             }
                         };
-                        let _ = heartbeat_item_clone
-                            .set_text(format!("❤️ {}", format_time(remaining)));
+                        let _ =
+                            heartbeat_item_clone.set_text(format!("❤️ {}", format_time(remaining)));
 
                         if elapsed >= config.heartbeat_interval {
                             last_tick = tokio::time::Instant::now();

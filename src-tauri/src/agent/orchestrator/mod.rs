@@ -125,12 +125,16 @@ impl Orchestrator {
             let mut count = 0;
             for (key, _) in records {
                 let k_str = String::from_utf8_lossy(&key);
-                if k_str.starts_with("skills:") || k_str.starts_with("rules:") || k_str.starts_with("workflows:") {
-                     let parts: Vec<&str> = k_str.split(':').collect();
-                     if parts.len() == 2 {
-                         skills_rules.push_str(&format!("- Domain: {}, Name: {}\n", parts[0], parts[1]));
-                         count += 1;
-                     }
+                if k_str.starts_with("skills:")
+                    || k_str.starts_with("rules:")
+                    || k_str.starts_with("workflows:")
+                {
+                    let parts: Vec<&str> = k_str.split(':').collect();
+                    if parts.len() == 2 {
+                        skills_rules
+                            .push_str(&format!("- Domain: {}, Name: {}\n", parts[0], parts[1]));
+                        count += 1;
+                    }
                 }
             }
             if count == 0 {
@@ -186,7 +190,7 @@ impl Orchestrator {
         ));
         for msg in history {
             out.push_str(&format!("### Role: {}\n", msg.role.to_uppercase()));
-            
+
             // Strip out <think> blocks for a cleaner markdown log
             let mut clean_content = msg.content.clone();
             while let Some(start) = clean_content.find("<think>") {

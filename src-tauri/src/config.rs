@@ -250,6 +250,7 @@ impl AppConfig {
             reflector_prompt: None,
             heartbeat_prompt: None,
             worker_prompt: None,
+            custom_languages: Vec::new(),
             registry_prompt: None,
             heartbeat_enabled: false,
             heartbeat_interval: 3600,

@@ -31,7 +31,8 @@ impl super::Orchestrator {
             _ => (language.to_uppercase(), language.to_string()),
         };
 
-let fallback_planner_prompt = format!(r#"[PLANNER SYSTEM PROMPT]
+        let fallback_planner_prompt = format!(
+            r#"[PLANNER SYSTEM PROMPT]
 {sys}
 
 {skills}
@@ -85,9 +86,9 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             .replace("{BRAIN_FILES}", &brain_files_md)
             .replace("{SCHEDULES}", &schedule_files_md)
             .replace("{SKILLS_RULES}", &skills_rules);
-        
+
         if !planner_prompt.contains("[AVAILABLE CUSTOM SKILLS & RULES]") {
-             planner_prompt.push_str(&format!("\n\n{}", skills_rules));
+            planner_prompt.push_str(&format!("\n\n{}", skills_rules));
         }
 
         let mut history = vec![ChatMessage {

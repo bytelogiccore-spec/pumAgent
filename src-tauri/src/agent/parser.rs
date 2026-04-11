@@ -33,6 +33,8 @@ pub fn extract_json_blocks(markdown: &str) -> Vec<Value> {
     // 2. Fallback for Gemma/Command R native tag formatting
     // E.g. `<|tool_call>call:search{action: "query", args: { "query": "..." }}<tool_call|>`
     let gemma_marker = "<|tool_call>call:";
+    let unquoted_keys_re = regex::Regex::new(r"([{,]\s*)([a-zA-Z0-9_]+)(\s*:)").ok();
+
     let mut g_idx = 0;
     while let Some(start) = markdown[g_idx..].find(gemma_marker) {
         let abs_start = g_idx + start + gemma_marker.len();
@@ -64,7 +66,7 @@ pub fn extract_json_blocks(markdown: &str) -> Vec<Value> {
 
             let mut clean_json = json_args_str.to_string();
             // Automatically add quotes to unquoted keys like `{action: "list", domain: "rules"}`
-            if let Ok(re) = regex::Regex::new(r"([{,]\s*)([a-zA-Z0-9_]+)(\s*:)") {
+            if let Some(re) = &unquoted_keys_re {
                 clean_json = re.replace_all(&clean_json, "$1\"$2\"$3").to_string();
             }
             clean_json = clean_json.replace("<|\"|>", "\"");
@@ -162,7 +164,7 @@ mod tests {
         let blocks = extract_json_blocks(text);
         assert_eq!(blocks.len(), 1);
     }
-    
+
     #[test]
     fn test_gemma_unquoted_keys() {
         let text = r#"<|tool_call>call:knowledge{action: "list", args: {domain: "rules"}}<tool_call|><|tool_response>"#;

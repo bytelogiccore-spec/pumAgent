@@ -33,7 +33,7 @@ impl TerminalTool {
             cmd = Command::new("sh");
             cmd.arg("-c").arg(cmd_string);
         }
-        
+
         cmd.current_dir(&self.work_dir);
 
         #[cfg(target_os = "windows")]
@@ -42,7 +42,8 @@ impl TerminalTool {
             cmd.creation_flags(create_no_window);
         }
 
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| format!("Failed to execute command: {}", e))?;
 
         let mut out_str = String::from_utf8_lossy(&output.stdout).to_string();
