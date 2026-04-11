@@ -2,6 +2,7 @@
   import { marked } from "marked";
   import markedKatex from "marked-katex-extension";
   import DOMPurify from "dompurify";
+  import { t } from "../lib/i18n.svelte";
   
   marked.use(markedKatex({ throwOnError: false }));
   
@@ -26,11 +27,11 @@
   function formatContent(content: string): string {
     // 1. Match standard and deepseek tags: <think>...</think>, <thought>...</thought>, <|think|>...</|think|>
     let processed = content.replace(/<(?:\|)?(?:think|thought)(?:\|)?>([\s\S]*?)<\/(?:\|)?(?:think|thought)(?:\|)?>/gi, (match, p1) => {
-        return `<details class="reasoning-block"><summary class="reasoning-summary">🧠 AI 사고 과정 (Thinking Process)</summary><div class="reasoning-content">${p1.trim()}</div></details>\n\n`;
+        return `<details class="reasoning-block"><summary class="reasoning-summary">${t("chat.think_process")}</summary><div class="reasoning-content">${p1.trim()}</div></details>\n\n`;
     });
     // 2. Match Gemma 4 specific raw chat template tokens: <|channel>thought ... <channel|>
     processed = processed.replace(/<\|channel>thought([\s\S]*?)<channel\|>/gi, (match, p1) => {
-        return `<details class="reasoning-block"><summary class="reasoning-summary">🧠 AI 사고 과정 (Thinking Process)</summary><div class="reasoning-content">${p1.trim()}</div></details>\n\n`;
+        return `<details class="reasoning-block"><summary class="reasoning-summary">${t("chat.think_process")}</summary><div class="reasoning-content">${p1.trim()}</div></details>\n\n`;
     });
     return DOMPurify.sanitize(marked.parse(processed) as string, { 
         ADD_ATTR: ['target', 'class', 'style'], 

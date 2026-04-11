@@ -137,12 +137,12 @@
             <textarea id="schedTask" bind:value={scheduleData.task_prompt} oninput={syncScheduleData} placeholder={t("knowledge.ph_task")} style="flex: 1; min-height: 150px; font-family: 'Inter', sans-serif; resize: none; padding: 12px; border: 1px solid #ccc; background: #fff;"></textarea>
           </div>
           <div class="form-group">
-            <label for="schedView">최근 실행 기록보기 (Raw JSON)</label>
+            <label for="schedView">{t("knowledge.ph_raw_json")}</label>
             <textarea id="schedView" readonly bind:value={appState.viewingItemContent} style="height: 100px; background: #f4f4f4; border: 1px solid #ddd; padding: 8px; font-family: monospace; font-size: 0.85rem; color: #555; resize: none;"></textarea>
           </div>
         </div>
       {:else}
-        <textarea class="sys-textarea" bind:value={appState.viewingItemContent} placeholder="내용을 입력하세요..." readonly={!["skills", "rules", "workflows", "brain", "schedules"].includes(appState.sysModalDomain)}></textarea>
+        <textarea class="sys-textarea" bind:value={appState.viewingItemContent} placeholder={t("knowledge.ph_edit_content")} readonly={!["skills", "rules", "workflows", "brain", "schedules"].includes(appState.sysModalDomain)}></textarea>
       {/if}
     {/if}
   </div>

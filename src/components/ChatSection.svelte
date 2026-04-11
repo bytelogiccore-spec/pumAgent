@@ -34,7 +34,7 @@
       let result = "";
       
       if (isVideo || (!isImage && !isText)) {
-         result = `[첨부 파일 참조: ${file.name}]`;
+         result = t("chat.attach_ref", { name: file.name });
          appState.attachedFiles = [
             ...(appState.attachedFiles || []), 
             { type: 'document', name: file.name, data: result, file }
@@ -100,7 +100,7 @@
   function startVoiceInput() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      showError("이 브라우저(Tauri/WebView)에서는 음성 인식을 지원하지 않습니다.");
+      showError(t("chat.voice_not_supported"));
       return;
     }
     
@@ -132,7 +132,7 @@
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error", event.error);
-      showError("음성 인식 오류: " + event.error);
+      showError(t("chat.voice_error", { err: event.error }));
       isRecording = false;
       recognitionRef = null;
     };
@@ -232,7 +232,7 @@
         </div>
         <div>
           {#if appState.messages.length > 1}
-            <button class="clear-chat-thin-btn" onclick={wipeChat} aria-label="Wipe Chat" title="대화 내역 지우기">
+            <button class="clear-chat-thin-btn" onclick={wipeChat} aria-label="Wipe Chat" title={t("chat.wipe_title")}>
               Clear
             </button>
           {/if}
@@ -245,12 +245,12 @@
           {#if appState.isAttachListMinimized}
             <button class="minimize-btn" onclick={() => appState.isAttachListMinimized = false}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-              첨부된 파일 {appState.attachedFiles.length}개
+              {t("chat.attach_count_badge", { count: appState.attachedFiles.length })}
             </button>
           {:else}
             <div class="attachment-header">
-              <span class="attachment-label">첨부 대기 중인 파일 ({appState.attachedFiles.length})</span>
-              <button class="icon-btn-small" onclick={() => appState.isAttachListMinimized = true} title="최소화">
+              <span class="attachment-label">{t("chat.attach_waiting", { count: appState.attachedFiles.length })}</span>
+              <button class="icon-btn-small" onclick={() => appState.isAttachListMinimized = true} title={t("chat.attach_min")}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </button>
             </div>
@@ -304,7 +304,7 @@
             title={t("chat.stop")}>⛔</button
           >
         {:else}
-          <button class="icon-btn toggle-voice-btn" class:recording={isRecording} onclick={() => { if(isRecording) stopVoiceInput(); else startVoiceInput(); }} title="음성 입력">
+          <button class="icon-btn toggle-voice-btn" class:recording={isRecording} onclick={() => { if(isRecording) stopVoiceInput(); else startVoiceInput(); }} title={t("chat.voice_title")}>
             {isRecording ? '🛑' : '🎙️'}
           </button>
           <button class="icon-btn send-btn" onclick={submitQuery} title={t("chat.send")} style="color:#1a1a1a;">

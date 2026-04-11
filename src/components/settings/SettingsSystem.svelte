@@ -20,7 +20,7 @@
 
   async function generateCustomLang() {
     if (!appState.config.endpoints || appState.config.endpoints.length === 0 || !appState.config.endpoints[0].api_key) {
-      showError("AI API 설정이 아직 완료되지 않았습니다. System 탭에서 LLM Endpoints API Key를 먼저 설정해주세요.");
+      showError(t("settings.api_not_set"));
       return;
     }
 
@@ -45,7 +45,7 @@
       customLangInput = "";
     } catch (e) {
       console.error(e);
-      showError("번역 생성 실패: " + e);
+      showError(t("settings.trans_fail") + e);
     } finally {
       isTranslating = false;
     }
@@ -55,23 +55,23 @@
 {#if appState.sysModalDomain === "setting_server"}
 <div class="form-group" style="padding-bottom: 8px; border-bottom: 1px solid #27272a; margin-bottom: 16px;">
   <label style="display:flex; justify-content:space-between; align-items:center;">
-    <span>🌍 Interface Language</span>
+    <span>{t("settings.iface_lang")}</span>
     <select value={isCustomLanguage ? 'custom' : appState.config.language} onchange={onLanguageSelect} class="sys-select" style="width: 200px;">
-      <option value="en">English (Default)</option>
-      <option value="ko">한국어 (Korean)</option>
+      <option value="en">{t("settings.lang_en")}</option>
+      <option value="ko">{t("settings.lang_ko")}</option>
       {#if appState.config.customLanguages}
         {#each appState.config.customLanguages as lang}
-          <option value={lang}>{lang.charAt(0).toUpperCase() + lang.slice(1)} (AI)</option>
+          <option value={lang}>{lang.charAt(0).toUpperCase() + lang.slice(1)}{t("settings.lang_ai")}</option>
         {/each}
       {/if}
-      <option value="custom">✨ Generate via AI...</option>
+      <option value="custom">{t("settings.lang_custom")}</option>
     </select>
   </label>
   {#if isCustomLanguage}
     <div style="margin-top: 12px; display:flex; gap: 8px; align-items:center;">
-      <input type="text" bind:value={customLangInput} placeholder="Enter any language (e.g., Italian, ru, etc.)" style="flex:1;" />
+      <input type="text" bind:value={customLangInput} placeholder={t("settings.lang_ph")} style="flex:1;" />
       <button class="sys-badge" onclick={generateCustomLang} disabled={isTranslating} style="background: #1a1a1a; color: white;">
-        {isTranslating ? "Translating..." : "Translate & Apply"}
+        {isTranslating ? t("settings.translating") : t("settings.trans_apply")}
       </button>
     </div>
   {/if}
@@ -83,12 +83,12 @@
   </label>
 </div>
 
-<div style="font-size: 0.8rem; color: #a1a1aa; font-weight: bold; margin-top: 24px; margin-bottom: 8px;">Knowledge Base Limits</div>
+<div style="font-size: 0.8rem; color: #a1a1aa; font-weight: bold; margin-top: 24px; margin-bottom: 8px;">{t("settings.kb_limits")}</div>
 <div class="form-group" style="display:flex; flex-direction:row; gap: 16px;">
-  <label style="flex: 1;">Global Rules Token Limit
+  <label style="flex: 1;">{t("settings.kb_rules")}
     <input type="number" min="500" max="10000" step="100" bind:value={appState.config.kbRulesTokenLimit} />
   </label>
-  <label style="flex: 1;">Skills & Workflows Token Limit
+  <label style="flex: 1;">{t("settings.kb_skills")}
     <input type="number" min="2000" max="50000" step="1000" bind:value={appState.config.kbSkillsTokenLimit} />
   </label>
 </div>
