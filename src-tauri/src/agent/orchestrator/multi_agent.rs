@@ -47,7 +47,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
    - "brain": (action: "list", args: {{}}) -> List all your long-term memory artifact files.
    - "brain": (action: "read", args: {{"name": "filename.md"}}) -> Read the precise content of a specific memory artifact file.
    - "brain": (action: "write_artifact", args: {{"name": "filename.md", "content": "markdown string"}}) -> Create or overwrite a semantic long-term memory document.
-   - "terminal": (action: "execute", args: {{"command": "string"}}) -> Execute Powershell commands. *WARNING: You are sandboxed to the `./Work/` folder.*
+   - "terminal": (action: "execute", args: {{"command": "string"}}) -> Execute Shell commands. *WARNING: You are sandboxed to the `./Work/` folder.*
    - "knowledge": (action: "read"|"write"|"list"|"delete", args: {{"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}}) -> Manage your own logic and rules by writing to the knowledge base!
      * IF the user asks to save a rule, skill, workflow, or schedule task, YOU MUST use the `knowledge` tool to `write` it!
      * CRITICAL: If the user asks to schedule a periodic repeating task (e.g. "every 5 minutes"), YOU MUST set `domain="schedules"`. DO NOT use `workflows` for periodic tasks.

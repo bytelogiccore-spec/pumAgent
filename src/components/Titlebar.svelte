@@ -1,8 +1,17 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getVersion } from "@tauri-apps/api/app";
   import { appState } from "../lib/store.svelte";
+  import { onMount } from "svelte";
   
   let appWindow: any;
+  let appVersion = $state("");
+
+  onMount(async () => {
+    try {
+      appVersion = await getVersion();
+    } catch (e) {}
+  });
   try {
     appWindow = getCurrentWindow();
   } catch (err) {
@@ -29,6 +38,9 @@
       <img src="/favicon.png" alt="logo" class="logo" />
     </div>
     <span data-tauri-drag-region class="title-text">PumAgent</span>
+    {#if appVersion}
+      <span data-tauri-drag-region class="version-text">v{appVersion}</span>
+    {/if}
   </div>
   
   <div class="window-controls">
@@ -93,6 +105,14 @@
     font-weight: 500;
     color: #e0e0e0;
     letter-spacing: 0.5px;
+  }
+
+  .version-text {
+    font-size: 11px;
+    color: #888;
+    margin-left: 8px;
+    font-family: monospace;
+    margin-top: 1px;
   }
 
   .window-controls {

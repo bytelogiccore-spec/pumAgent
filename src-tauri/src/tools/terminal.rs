@@ -1,4 +1,5 @@
 use std::fs;
+#[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -24,15 +25,24 @@ impl TerminalTool {
         // The sandbox relies on setting the current_dir.
         // Note: For absolute security, docker is needed, but this prevents accidental operations.
 
-        let create_no_window = 0x08000000;
+        let mut cmd;
+        if cfg!(target_os = "windows") {
+            cmd = Command::new("powershell");
+            cmd.arg("-Command").arg(cmd_string);
+        } else {
+            cmd = Command::new("sh");
+            cmd.arg("-c").arg(cmd_string);
+        }
+        
+        cmd.current_dir(&self.work_dir);
 
-        // Timeout handling or long running process handling could be added later
-        let output = Command::new("powershell")
-            .arg("-Command")
-            .arg(cmd_string)
-            .current_dir(&self.work_dir)
-            .creation_flags(create_no_window)
-            .output()
+        #[cfg(target_os = "windows")]
+        {
+            let create_no_window = 0x08000000;
+            cmd.creation_flags(create_no_window);
+        }
+
+        let output = cmd.output()
             .map_err(|e| format!("Failed to execute command: {}", e))?;
 
         let mut out_str = String::from_utf8_lossy(&output.stdout).to_string();

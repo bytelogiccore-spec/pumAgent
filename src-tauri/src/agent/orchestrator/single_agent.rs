@@ -67,7 +67,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
    - "brain": (action: "list", args: {{}}) -> List all your long-term memory artifact files.
    - "brain": (action: "read", args: {{"name": "filename.md"}}) -> Read the precise content of a specific memory artifact file.
    - "brain": (action: "write_artifact", args: {{"name": "filename.md", "content": "markdown string"}}) -> Create or overwrite a semantic long-term memory document. USE THIS to persist specific user data, personas, project details, etc.
-   - "terminal": (action: "execute", args: {{"command": "string"}}) -> Execute Powershell commands. *WARNING: You are sandboxed to the `./Work/` folder. Use this to run scripts, curl data, schedule tasks, etc.*
+   - "terminal": (action: "execute", args: {{"command": "string"}}) -> Execute System Shell commands. *WARNING: You are sandboxed to the `./Work/` folder. Use this to run scripts, curl data, schedule tasks, etc.*
    - "knowledge": (action: "read"|"write"|"list"|"delete", args: {{"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}}) -> Manage your own logic and rules by writing to the knowledge base!
      *CRITICAL: If the user asks to schedule a periodic repeating task (e.g. "every 5 minutes"), YOU MUST set `domain="schedules"`. DO NOT use `workflows` for periodic tasks.*
      *CRITICAL: If domain='schedules', `content` MUST be a JSON string EXACTLY matching this schema: `{{\"name\": \"str\", \"interval_seconds\": num, \"description\": \"str\", \"task_prompt\": \"Exact prompt to execute per interval\", \"end_date\": \"ISO8601 string or null for infinite\"}}`*
