@@ -61,7 +61,7 @@
       <option value="ko">{t("settings.lang_ko")}</option>
       {#if appState.config.customLanguages}
         {#each appState.config.customLanguages as lang}
-          <option value={lang}>{(localeManager.loadedLocales[lang] && localeManager.loadedLocales[lang]["settings.lang_custom_display"] && localeManager.loadedLocales[lang]["settings.lang_custom_display"] !== "English(English)") ? localeManager.loadedLocales[lang]["settings.lang_custom_display"] : lang}</option>
+          <option value={lang}>{(localeManager.loadedLocales[lang] && localeManager.loadedLocales[lang]["settings.lang_custom_display"] && !localeManager.loadedLocales[lang]["settings.lang_custom_display"].includes("WRITE_ENGLISH_NAME") && localeManager.loadedLocales[lang]["settings.lang_custom_display"] !== "English(English)") ? localeManager.loadedLocales[lang]["settings.lang_custom_display"] : lang}</option>
         {/each}
       {/if}
       <option value="custom">{t("settings.lang_custom")}</option>

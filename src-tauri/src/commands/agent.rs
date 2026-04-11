@@ -333,18 +333,22 @@ pub async fn translate_i18n(
         endpoint.api_key,
     );
 
-    let en_content = match state.db.get("knowledge_base", b"locales:en.json") {
+    let mut en_content = match state.db.get("knowledge_base", b"locales:en.json") {
         Ok(Some(bytes)) => String::from_utf8(bytes).unwrap_or_default(),
         _ => return Err("en.json base locale not found".to_string()),
     };
+
+    en_content = en_content.replace(
+        "\"settings.lang_custom_display\": \"English(English)\"", 
+        "\"settings.lang_custom_display\": \"WRITE_ENGLISH_NAME(WRITE_NATIVE_NAME_HERE)\""
+    );
 
     let system_prompt = "You are a professional JSON translator. Translate the given localization JSON map values into the requested target language.
 RULES:
 1. Keep all JSON keys exactly the same.
 2. Translate ONLY the values into the target language.
 3. Return strictly valid JSON with no markdown formatting, no codeblocks and no explanation.
-4. CRITICAL: For the exact key `settings.lang_custom_display`, you MUST change its value to the target language's English name followed by its native name in parentheses.
-   Example: If target is '중국어', change it to 'Chinese(中文)'. If target is 'italiano', change it to 'Italian(Italiano)'. DO NOT output 'English(English)' unless the target is actually English.".to_string();
+4. CRITICAL: For `settings.lang_custom_display`, replace the placeholder with the target language's English name followed by its native name. Example if target is '중국어': \"Chinese(中文)\".".to_string();
 
     let messages = vec![
         crate::agent::llm_client::ChatMessage {
