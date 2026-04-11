@@ -1,4 +1,5 @@
 use crate::AgentState;
+use crate::config::AppConfig;
 use serde::Serialize;
 use std::fs;
 use tauri::State;
@@ -82,9 +83,10 @@ pub struct KbQuotaResult {
 
 #[tauri::command]
 pub fn get_knowledge_quota(state: State<'_, AgentState>) -> Result<KbQuotaResult, String> {
-    let mut rules = QuotaUsage { count: 0, approx_tokens: 0, limit: 1200 };
-    let mut skills = QuotaUsage { count: 0, approx_tokens: 0, limit: 8000 };
-    let mut workflows = QuotaUsage { count: 0, approx_tokens: 0, limit: 8000 };
+    let config = AppConfig::load(&state.base_dir);
+    let mut rules = QuotaUsage { count: 0, approx_tokens: 0, limit: config.kb_rules_token_limit };
+    let mut skills = QuotaUsage { count: 0, approx_tokens: 0, limit: config.kb_skills_token_limit };
+    let mut workflows = QuotaUsage { count: 0, approx_tokens: 0, limit: config.kb_skills_token_limit };
 
     if let Ok(entries) = state.db.scan("knowledge_base") {
         for (key, val) in entries {

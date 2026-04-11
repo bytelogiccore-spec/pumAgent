@@ -65,6 +65,8 @@ export const appState = $state({
     telegramEnabled: false,
     telegramBotToken: "",
     telegramChatId: "",
+    kbRulesTokenLimit: 1200,
+    kbSkillsTokenLimit: 8000,
   },
   kbQuota: null as any,
   sysModalOpen: false,

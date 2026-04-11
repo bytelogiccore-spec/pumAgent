@@ -243,6 +243,9 @@ export async function loadSettings() {
       if (configData.telegram_bot_token) appState.config.telegramBotToken = configData.telegram_bot_token;
       if (configData.telegram_chat_id) appState.config.telegramChatId = configData.telegram_chat_id;
 
+      if (configData.kb_rules_token_limit !== undefined) appState.config.kbRulesTokenLimit = configData.kb_rules_token_limit;
+      if (configData.kb_skills_token_limit !== undefined) appState.config.kbSkillsTokenLimit = configData.kb_skills_token_limit;
+
       appState.config.isFirstRun = false;
       addLog(t("sys.config_loaded"));
     }
@@ -283,6 +286,8 @@ export async function saveSettings(closeModal: boolean = true) {
         telegram_enabled: appState.config.telegramEnabled,
         telegram_bot_token: appState.config.telegramBotToken,
         telegram_chat_id: appState.config.telegramChatId,
+        kb_rules_token_limit: appState.config.kbRulesTokenLimit,
+        kb_skills_token_limit: appState.config.kbSkillsTokenLimit,
       },
     });
     await invoke("flush_db");

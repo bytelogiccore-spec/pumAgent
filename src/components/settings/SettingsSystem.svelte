@@ -82,6 +82,17 @@
     <input type="number" min="1" max="10" bind:value={appState.config.maxLoops} />
   </label>
 </div>
+
+<div style="font-size: 0.8rem; color: #a1a1aa; font-weight: bold; margin-top: 24px; margin-bottom: 8px;">Knowledge Base Limits</div>
+<div class="form-group" style="display:flex; flex-direction:row; gap: 16px;">
+  <label style="flex: 1;">Global Rules Token Limit
+    <input type="number" min="500" max="10000" step="100" bind:value={appState.config.kbRulesTokenLimit} />
+  </label>
+  <label style="flex: 1;">Skills & Workflows Token Limit
+    <input type="number" min="2000" max="50000" step="1000" bind:value={appState.config.kbSkillsTokenLimit} />
+  </label>
+</div>
+
 <div class="form-group" style="margin-top: 16px;">
   <label>{t("form.searchProvider")}
     <select bind:value={appState.config.searchProvider} class="sys-select">

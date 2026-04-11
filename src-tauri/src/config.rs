@@ -17,6 +17,14 @@ fn default_true() -> bool {
     true
 }
 
+fn default_rules_limit() -> u32 {
+    1200
+}
+
+fn default_skills_limit() -> u32 {
+    8000
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LlmEndpoint {
     pub id: String,
@@ -115,6 +123,11 @@ pub struct AppConfig {
     pub telegram_bot_token: String,
     #[serde(default)]
     pub telegram_chat_id: String,
+
+    #[serde(default = "default_rules_limit")]
+    pub kb_rules_token_limit: u32,
+    #[serde(default = "default_skills_limit")]
+    pub kb_skills_token_limit: u32,
 }
 
 impl AppConfig {
@@ -257,6 +270,8 @@ impl AppConfig {
             telegram_enabled: false,
             telegram_bot_token: "".to_string(),
             telegram_chat_id: "".to_string(),
+            kb_rules_token_limit: default_rules_limit(),
+            kb_skills_token_limit: default_skills_limit(),
         }
     }
 }
