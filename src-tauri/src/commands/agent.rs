@@ -333,22 +333,33 @@ pub async fn translate_i18n(
         endpoint.api_key,
     );
 
-    let mut en_content = match state.db.get("knowledge_base", b"locales:en.json") {
+    let en_content = match state.db.get("knowledge_base", b"locales:en.json") {
         Ok(Some(bytes)) => String::from_utf8(bytes).unwrap_or_default(),
         _ => return Err("en.json base locale not found".to_string()),
     };
 
-    en_content = en_content.replace(
-        "\"settings.lang_custom_display\": \"English(English)\"", 
-        "\"settings.lang_custom_display\": \"WRITE_ENGLISH_NAME(WRITE_NATIVE_NAME_HERE)\""
-    );
+    // Sub-routine: Ask LLM for the display name explicitly
+    let name_msg = vec![
+        crate::agent::llm_client::ChatMessage {
+            role: "system".to_string(),
+            content: "You are a naming assistant. Output EXACTLY EnglishName(NativeName) and nothing else.".to_string(),
+            images_base64: None,
+        },
+        crate::agent::llm_client::ChatMessage {
+            role: "user".to_string(),
+            content: format!("What is the language '{}'? Format EXACTLY as: EnglishName(NativeName).\nExample: Korean(한국어). Give NO other text.", target_lang),
+            images_base64: None,
+        },
+    ];
+    let mut custom_display = target_lang.clone();
+    if let Ok(res) = llm.chat(&name_msg, 0.1).await {
+        let txt = res.content.trim().to_string();
+        if !txt.is_empty() && txt.contains("(") && txt.contains(")") {
+            custom_display = txt;
+        }
+    }
 
-    let system_prompt = "You are a professional JSON translator. Translate the given localization JSON map values into the requested target language.
-RULES:
-1. Keep all JSON keys exactly the same.
-2. Translate ONLY the values into the target language.
-3. Return strictly valid JSON with no markdown formatting, no codeblocks and no explanation.
-4. CRITICAL: For `settings.lang_custom_display`, replace the placeholder with the target language's English name followed by its native name. Example if target is '중국어': \"Chinese(中文)\".".to_string();
+    let system_prompt = "You are a professional JSON translator. Translate all map values into the requested target language. RULES: Keep JSON keys exactly the same. Translate ONLY the values. Return strictly valid JSON with no markdown formatting.".to_string();
 
     let messages = vec![
         crate::agent::llm_client::ChatMessage {
@@ -379,17 +390,21 @@ RULES:
     }
     result_json = result_json.trim().to_string();
 
-    if let Err(e) = serde_json::from_str::<serde_json::Value>(&result_json) {
-        return Err(format!(
-            "Failed to parse LLM output as JSON: {}. Output: {}",
-            e, result_json
-        ));
+    let mut parsed_json = match serde_json::from_str::<serde_json::Value>(&result_json) {
+        Ok(v) => v,
+        Err(e) => return Err(format!("Failed to parse LLM output as JSON: {}. Output: {}", e, result_json)),
+    };
+
+    if let Some(obj) = parsed_json.as_object_mut() {
+        obj.insert("settings.lang_custom_display".to_string(), serde_json::Value::String(custom_display));
     }
+    
+    let final_result = serde_json::to_string_pretty(&parsed_json).unwrap_or(result_json);
 
     let key = format!("locales:{}.json", target_lang);
     state
         .db
-        .insert("knowledge_base", key.as_bytes(), result_json.as_bytes())
+        .insert("knowledge_base", key.as_bytes(), final_result.as_bytes())
         .map_err(|e| e.to_string())?;
     let _ = state.db.flush();
 
