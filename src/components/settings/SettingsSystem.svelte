@@ -70,8 +70,20 @@
   {#if isCustomLanguage}
     <div style="margin-top: 12px; display:flex; gap: 8px; align-items:center;">
       <input type="text" bind:value={customLangInput} placeholder={t("settings.lang_ph")} style="flex:1;" />
-      <button class="sys-badge" onclick={generateCustomLang} disabled={isTranslating} style="background: #1a1a1a; color: white;">
-        {isTranslating ? t("settings.translating") : t("settings.trans_apply")}
+      <button class="sys-badge" onclick={generateCustomLang} disabled={isTranslating} style="background: #1a1a1a; color: white; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        {#if isTranslating}
+          <svg class="brain-loader" viewBox="0 0 120 100" width="20" height="20" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+            <path class="brain-line" d="M 60 15 C 40 5, 10 20, 15 45 C 5 60, 20 80, 40 85 C 50 100, 70 100, 80 85 C 100 80, 115 60, 105 45 C 110 20, 80 5, 60 15 Z" />
+            <path class="brain-line" d="M 60 15 L 60 85" />
+            <path class="brain-line" d="M 30 35 C 45 35, 50 45, 60 40" />
+            <path class="brain-line" d="M 90 35 C 75 35, 70 45, 60 40" />
+            <path class="brain-line" d="M 25 60 C 40 55, 45 65, 60 60" />
+            <path class="brain-line" d="M 95 60 C 80 55, 75 65, 60 60" />
+          </svg>
+          {t("settings.translating")}
+        {:else}
+          {t("settings.trans_apply")}
+        {/if}
       </button>
     </div>
   {/if}
@@ -201,9 +213,29 @@
     cursor: pointer;
     transition: 0.2s;
   }
-  .sys-badge:hover {
+  .sys-badge:hover:not(:disabled) {
     background: #e0005a;
     color: #fcfbf8;
     border-color: #e0005a;
+  }
+  .sys-badge:disabled {
+    opacity: 0.8;
+    cursor: wait;
+  }
+  .brain-loader {
+    animation: pulseBrain 1.5s infinite ease-in-out;
+  }
+  .brain-line {
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+    animation: drawBrain 1.5s linear infinite alternate;
+  }
+  @keyframes drawBrain {
+    0% { stroke-dashoffset: 300; }
+    100% { stroke-dashoffset: 0; }
+  }
+  @keyframes pulseBrain {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50% { transform: scale(1.1); opacity: 1; }
   }
 </style>
