@@ -399,7 +399,7 @@ pub async fn translate_i18n(
         obj.insert("settings.lang_custom_display".to_string(), serde_json::Value::String(custom_display));
     }
     
-    let final_result = serde_json::to_string_pretty(&parsed_json).unwrap_or(result_json);
+    let final_result = serde_json::to_string_pretty(&parsed_json).unwrap_or(result_json.clone());
 
     let key = format!("locales:{}.json", target_lang);
     state
@@ -408,7 +408,7 @@ pub async fn translate_i18n(
         .map_err(|e| e.to_string())?;
     let _ = state.db.flush();
 
-    Ok(result_json)
+    Ok(final_result)
 }
 
 #[tauri::command]
