@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "pumAgent",
-  "version": "0.1.0-beta",
+  "version": "0.1.0",
   "identifier": "com.pumagent.app",
   "build": {
     "frontendDist": "../dist",
