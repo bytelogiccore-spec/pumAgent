@@ -132,5 +132,6 @@
   "settings.kb_rules": "전역 규칙 (Rules) 최대 토큰수",
   "settings.kb_skills": "스킬 및 워크플로우 최대 토큰수",
   "knowledge.ph_raw_json": "최근 실행 기록보기 (Raw JSON)",
-  "knowledge.ph_edit_content": "내용을 입력하세요..."
+  "knowledge.ph_edit_content": "내용을 입력하세요...",
+  "settings.lang_custom_display": "Korean(한국어)"
 }

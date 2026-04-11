@@ -125,6 +125,7 @@
   "settings.lang_ko": "한국어 (Korean)",
   "settings.lang_ai": " (AI)",
   "settings.lang_custom": "✨ Generate via AI...",
+  "settings.lang_custom_display": "English(English)",
   "settings.lang_ph": "Enter any language (e.g., Italian, ru, etc.)",
   "settings.translating": "Translating...",
   "settings.trans_apply": "Translate & Apply",

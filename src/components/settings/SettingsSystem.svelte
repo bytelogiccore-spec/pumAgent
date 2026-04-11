@@ -1,6 +1,6 @@
 <script lang="ts">
   import { appState, saveSettings, showError } from "../../lib/store.svelte";
-  import { t, initLocales } from "../../lib/i18n.svelte";
+  import { t, initLocales, localeManager } from "../../lib/i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
 
   let isCustomLanguage = $state(false);
@@ -61,7 +61,7 @@
       <option value="ko">{t("settings.lang_ko")}</option>
       {#if appState.config.customLanguages}
         {#each appState.config.customLanguages as lang}
-          <option value={lang}>{lang}</option>
+          <option value={lang}>{(localeManager.loadedLocales[lang] && localeManager.loadedLocales[lang]["settings.lang_custom_display"]) ? localeManager.loadedLocales[lang]["settings.lang_custom_display"] : lang}</option>
         {/each}
       {/if}
       <option value="custom">{t("settings.lang_custom")}</option>
