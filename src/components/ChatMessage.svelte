@@ -1,6 +1,9 @@
 <script lang="ts">
   import { marked } from "marked";
+  import markedKatex from "marked-katex-extension";
   import DOMPurify from "dompurify";
+  
+  marked.use(markedKatex({ throwOnError: false }));
   
   DOMPurify.addHook('afterSanitizeAttributes', function(node) {
     if ('target' in node) {
@@ -29,7 +32,11 @@
     processed = processed.replace(/<\|channel>thought([\s\S]*?)<channel\|>/gi, (match, p1) => {
         return `<details class="reasoning-block"><summary class="reasoning-summary">🧠 AI 사고 과정 (Thinking Process)</summary><div class="reasoning-content">${p1.trim()}</div></details>\n\n`;
     });
-    return DOMPurify.sanitize(marked.parse(processed) as string, { ADD_ATTR: ['target'], ADD_TAGS: ['details', 'summary'] });
+    return DOMPurify.sanitize(marked.parse(processed) as string, { 
+        ADD_ATTR: ['target', 'class', 'style'], 
+        ADD_TAGS: ['details', 'summary', 'math', 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mspace', 'msqrt', 'mstyle', 'merror', 'mpadded', 'mphantom', 'mfenced', 'msub', 'msup', 'msubsup', 'mover', 'munder', 'munderover', 'mtd', 'mtr', 'mtable', 'mroot', 'mlabeledtr', 'maction'],
+        USE_PROFILES: { html: true, mathMl: true }
+    });
   }
 </script>
 

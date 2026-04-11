@@ -48,15 +48,17 @@ impl super::Orchestrator {
             _ => ("KOREAN", "한국어"),
         };
 
-        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks) =
+        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks, skills_rules) =
             self.build_context();
 
         let force_tool_prompt = format!(
             r#"[USER DEFINED SYSTEM PROMPT]
-{}
+{sys}
+
+{skills}
 
 [SYSTEM TIME ANCHOR]
-Current System Time: {} (You live in this exact present moment. Use this to accurately calculate "recent", "upcoming", "past", and assess dates from search results).
+Current System Time: {current_time} (You live in this exact present moment. Use this to accurately calculate "recent", "upcoming", "past", and assess dates from search results).
 
 [CRITICAL TOOL INSTRUCTIONS & WORKFLOW RULES]
 1. IMPORTANT: ALWAYS check the [LONG TERM MEMORY (BRAIN)] file list at the bottom of this prompt FIRST. If a file seems relevant to the user's query, you MUST use the `brain` tool (with action "read") to read it before attempting an external external search!
@@ -72,7 +74,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
      *CRITICAL: If domain='schedules', `content` MUST be a JSON string EXACTLY matching this schema: `{{\"name\": \"str\", \"interval_seconds\": num, \"description\": \"str\", \"task_prompt\": \"Exact prompt to execute per interval\", \"end_date\": \"ISO8601 string or null for infinite\"}}`*
 
 [REGISTERED SCHEDULES]
-{}
+{schedules}
 
 2. To use a tool, output ONLY the following JSON block format (you may use multiple blocks):
 ```json
@@ -85,12 +87,18 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
 
 3. **[LANGUAGE POLICY]**
    - THINKING & TOOL EXECUTION: During intermediate steps where you are gathering data and planning, you MUST think, output tool JSON, and reason in **ENGLISH** to maximize token efficiency and cognitive accuracy.
-   - FINAL OUTPUT: ONLY when you have resolved the user's task and do not need any more tools, provide your FINAL direct response to the user translated entirely into natural **{}** ({}).
+   - FINAL OUTPUT: ONLY when you have resolved the user's task and do not need any more tools, provide your FINAL direct response to the user translated entirely into natural **{lang_name}** ({lang_native}).
 
 [LONG TERM MEMORY (BRAIN)]
-{}
+{brain}
 "#,
-            system_prompt, current_time, schedule_files_md, lang_name, lang_native, brain_files_md
+            sys = system_prompt,
+            skills = skills_rules,
+            current_time = current_time,
+            schedules = schedule_files_md,
+            lang_name = lang_name,
+            lang_native = lang_native,
+            brain = brain_files_md
         );
 
         // Construct conversation history with System Prompt at the head
@@ -272,7 +280,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
             // Inject the result as user system feedback
             history.push(ChatMessage {
                 role: "user".to_string(),
-                content: format!("여기는 시스템(또는 관찰 도구)의 결과입니다. 이 정보를 바탕으로 다음 단계 추론을 계속하거나 사용자에게 답변해 주시기 바랍니다.\n\n{}", result_summary_md),
+                content: format!("SYSTEM OBSERVATION RESULTS:\n{}\n\nINSTRUCTION: If these results fulfill the user's most recent request completely, provide your FINAL direct response to the user. Explain ONLY what was just accomplished. Do NOT artificially repeat conversational history. If you need more data or intermediate steps, respond ONLY with JSON tool blocks.", result_summary_md),
                 images_base64: None,
             });
         }

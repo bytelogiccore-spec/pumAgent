@@ -288,11 +288,6 @@
               appState.config.useMultiAgentWorkflow = !appState.config.useMultiAgentWorkflow;
               return;
             }
-            if (e.key.toLowerCase() === "t" && e.ctrlKey) {
-              e.preventDefault();
-              appState.config.useThinkMode = !appState.config.useThinkMode;
-              return;
-            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submitQuery();
@@ -328,10 +323,6 @@
         <div>
           <span>{t("chat.mode")}: <span style="color:#1a1a1a;">{appState.config.useMultiAgentWorkflow ? t("chat.multi_accuracy") : t("chat.single_fast")}</span></span>
           <span style="margin-left:6px; opacity:0.7;">(Shift+Tab)</span>
-        </div>
-        <div>
-          <span>{t("chat.think")}: <span style="color:#1a1a1a;">{appState.config.useThinkMode ? t("chat.on") : t("chat.off")}</span></span>
-          <span style="margin-left:6px; opacity:0.7;">(Ctrl+T)</span>
         </div>
         <div>Max Loops: {appState.config.maxLoops}</div>
       </div>

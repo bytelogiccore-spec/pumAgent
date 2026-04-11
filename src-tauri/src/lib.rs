@@ -149,9 +149,12 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             // Setup Tray Icon & Menu
-            let heartbeat_item = tauri::menu::MenuItemBuilder::with_id("heartbeat", "HeartBeat 실행 시간: -").enabled(false).build(app)?;
-            let maximize_item = tauri::menu::MenuItemBuilder::with_id("maximize", "최대화").build(app)?;
-            let quit_item = tauri::menu::MenuItemBuilder::with_id("quit", "종료").build(app)?;
+            let heartbeat_item =
+                tauri::menu::MenuItemBuilder::with_id("heartbeat", "❤️ -")
+                    .build(app)?;
+            let maximize_item =
+                tauri::menu::MenuItemBuilder::with_id("maximize", "Maximize").build(app)?;
+            let quit_item = tauri::menu::MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
             let menu = tauri::menu::MenuBuilder::new(app)
                 .item(&heartbeat_item)
@@ -179,7 +182,8 @@ pub fn run() {
                         button: tauri::tray::MouseButton::Left,
                         button_state: tauri::tray::MouseButtonState::Up,
                         ..
-                    } = event {
+                    } = event
+                    {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
@@ -216,7 +220,18 @@ pub fn run() {
                         let elapsed = last_tick.elapsed().as_secs();
                         let remaining = config.heartbeat_interval.saturating_sub(elapsed);
                         let _ = app_handle.emit("heartbeat_progress", remaining);
-                        let _ = heartbeat_item_clone.set_text(format!("HeartBeat 실행 시간: {}초 남음", remaining));
+                        let format_time = |secs: u64| {
+                            let h = secs / 3600;
+                            let m = (secs % 3600) / 60;
+                            let s = secs % 60;
+                            if h > 0 {
+                                format!("{:02}:{:02}:{:02}", h, m, s)
+                            } else {
+                                format!("{:02}:{:02}", m, s)
+                            }
+                        };
+                        let _ = heartbeat_item_clone
+                            .set_text(format!("❤️ {}", format_time(remaining)));
 
                         if elapsed >= config.heartbeat_interval {
                             last_tick = tokio::time::Instant::now();
@@ -225,7 +240,7 @@ pub fn run() {
                     } else {
                         last_tick = tokio::time::Instant::now();
                         let _ = app_handle.emit("heartbeat_progress", 0u64);
-                        let _ = heartbeat_item_clone.set_text("HeartBeat 실행 시간: 비활성화");
+                        let _ = heartbeat_item_clone.set_text("❤️ Disabled");
                     }
                 }
             });

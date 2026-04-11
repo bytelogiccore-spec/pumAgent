@@ -63,8 +63,11 @@ pub fn extract_json_blocks(markdown: &str) -> Vec<Value> {
             let json_args_str = &content[brace_idx..];
 
             let mut clean_json = json_args_str.to_string();
-            clean_json = clean_json.replace("action:", "\"action\":");
-            clean_json = clean_json.replace("args:", "\"args\":");
+            // Automatically add quotes to unquoted keys like `{action: "list", domain: "rules"}`
+            if let Ok(re) = regex::Regex::new(r"([{,]\s*)([a-zA-Z0-9_]+)(\s*:)") {
+                clean_json = re.replace_all(&clean_json, "$1\"$2\"$3").to_string();
+            }
+            clean_json = clean_json.replace("<|\"|>", "\"");
 
             if let Ok(mut parsed) = serde_json::from_str::<Value>(&clean_json) {
                 if let Some(obj) = parsed.as_object_mut() {
@@ -151,5 +154,21 @@ mod tests {
         let text = r#"<|tool_call>call:search { "action": "query", "args": { "query": "BTS 최신 정보", "time_range": "m" } }"#;
         let blocks = extract_json_blocks(text);
         assert_eq!(blocks.len(), 1);
+    }
+
+    #[test]
+    fn test_gemma_quotes() {
+        let text = r#"<|tool_call>call:knowledge{action:<|"|>list<|"|>,domain:<|"|>rules<|"|>}<tool_call|><|tool_response>"#;
+        let blocks = extract_json_blocks(text);
+        assert_eq!(blocks.len(), 1);
+    }
+    
+    #[test]
+    fn test_gemma_unquoted_keys() {
+        let text = r#"<|tool_call>call:knowledge{action: "list", args: {domain: "rules"}}<tool_call|><|tool_response>"#;
+        let blocks = extract_json_blocks(text);
+        assert_eq!(blocks.len(), 1);
+        let action = blocks[0].get("action").unwrap().as_str().unwrap();
+        assert_eq!(action, "list");
     }
 }

@@ -398,7 +398,7 @@ pub async fn test_llm_connection(
         content: "Ping!".to_string(),
         images_base64: None,
     }];
-    
+
     match client.chat(&msg, 0.5).await {
         Ok(_) => Ok("Connection successful".to_string()),
         Err(e) => Err(e.to_string()),

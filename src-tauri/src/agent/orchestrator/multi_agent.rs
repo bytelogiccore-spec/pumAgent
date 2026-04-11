@@ -22,61 +22,74 @@ impl super::Orchestrator {
     ) -> Result<(String, Vec<ChatMessage>), String> {
         let is_background_run = user_messages.is_empty();
 
-        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks) =
+        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks, skills_rules) =
             self.build_context();
 
-        let (lang_name, lang_native) = match language {
+        let (lang_name, _lang_native) = match language {
             "en" => ("ENGLISH", "English"),
             "ja" => ("JAPANESE", "日本語"),
             "zh" => ("CHINESE", "中文"),
             _ => ("KOREAN", "한국어"),
         };
 
-        let fallback_planner_prompt = r#"[PLANNER SYSTEM PROMPT]
-{SYSTEM_PROMPT}
+let fallback_planner_prompt = format!(r#"[PLANNER SYSTEM PROMPT]
+{sys}
+
+{skills}
 
 [SYSTEM TIME ANCHOR]
-Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use this to accurately calculate "recent", "upcoming", "past", and assess dates from search results).
+Current System Time: {current_time} (You live in this exact present moment. Use this to accurately calculate "recent", "upcoming", "past", and assess dates from search results).
 
 [CRITICAL TOOL INSTRUCTIONS & WORKFLOW RULES]
 1. You are the PLANNER and RESEARCHER. Your job is to gather data using tools.
 2. You have the following tools:
-   - "search": (action: "query", args: {"query": "string", "time_range": "d|w|m|y"}) -> Google Search.
-   - "crawl4ai": (action: "scrape", args: {"url": "string"}) -> Read webpage content.
-   - "brain": (action: "list", args: {}) -> List all your long-term memory artifact files.
-   - "brain": (action: "read", args: {"name": "filename.md"}) -> Read the precise content of a specific memory artifact file.
-   - "brain": (action: "write_artifact", args: {"name": "filename.md", "content": "markdown string"}) -> Create or overwrite a semantic long-term memory document.
-   - "terminal": (action: "execute", args: {"command": "string"}) -> Execute Powershell commands. *WARNING: You are sandboxed to the `./Work/` folder.*
-   - "knowledge": (action: "read"|"write"|"list"|"delete", args: {"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}) -> Manage your own logic and rules by writing to the knowledge base!
+   - "search": (action: "query", args: {{"query": "string", "time_range": "d|w|m|y"}}) -> Google Search.
+   - "crawl4ai": (action: "scrape", args: {{"url": "string"}}) -> Read webpage content.
+   - "brain": (action: "list", args: {{}}) -> List all your long-term memory artifact files.
+   - "brain": (action: "read", args: {{"name": "filename.md"}}) -> Read the precise content of a specific memory artifact file.
+   - "brain": (action: "write_artifact", args: {{"name": "filename.md", "content": "markdown string"}}) -> Create or overwrite a semantic long-term memory document.
+   - "terminal": (action: "execute", args: {{"command": "string"}}) -> Execute Powershell commands. *WARNING: You are sandboxed to the `./Work/` folder.*
+   - "knowledge": (action: "read"|"write"|"list"|"delete", args: {{"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}}) -> Manage your own logic and rules by writing to the knowledge base!
      * IF the user asks to save a rule, skill, workflow, or schedule task, YOU MUST use the `knowledge` tool to `write` it!
      * CRITICAL: If the user asks to schedule a periodic repeating task (e.g. "every 5 minutes"), YOU MUST set `domain="schedules"`. DO NOT use `workflows` for periodic tasks.
-     * CRITICAL: If domain='schedules', `content` MUST be a JSON string EXACTLY matching this schema: `{"name": "str", "interval_seconds": num, "description": "str", "task_prompt": "Exact prompt to execute per interval", "end_date": "ISO8601 string or null for infinite"}`
-   - "telegram": (action: "send_message", args: {"message": "string"}) -> Send a proactive push notification to the user's mobile Telegram. Use this immediately if you discover pending tasks or important alerts during a heartbeat/background loop.
+     * CRITICAL: If domain='schedules', `content` MUST be a JSON string EXACTLY matching this schema: `{{\"name\": \"str\", \"interval_seconds\": num, \"description\": \"str\", \"task_prompt\": \"Exact prompt to execute per interval\", \"end_date\": \"ISO8601 string or null for infinite\"}}`
+   - "telegram": (action: "send_message", args: {{"message": "string"}}) -> Send a proactive push notification to the user's mobile Telegram. Use this immediately if you discover pending tasks or important alerts during a heartbeat/background loop.
 3. To use a tool, output ONLY the following JSON block format (you may use multiple blocks):
 ```json
-{
+{{
   "tool": "search",
   "action": "query",
-  "args": { "query": "your search query here" }
-}
+  "args": {{ "query": "your search query here" }}
+}}
 ```
 4. ONLY output JSON blocks when you need more information.
    - If you do not need tools (e.g., simple greetings, casual chat), simply reply naturally to the user and DO NOT output JSON and DO NOT output "DONE".
    - If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE".
 
 [LONG TERM MEMORY (BRAIN)]
-{BRAIN_FILES}
+{brain}
 
 [REGISTERED SCHEDULES]
-{SCHEDULES}
-"#;
+{schedules}
+"#,
+            sys = system_prompt,
+            skills = skills_rules,
+            current_time = current_time,
+            brain = brain_files_md,
+            schedules = schedule_files_md
+        );
 
-        let base_planner = planner_prompt_opt.unwrap_or(fallback_planner_prompt);
-        let planner_prompt = base_planner
+        let base_planner = planner_prompt_opt.unwrap_or(&fallback_planner_prompt);
+        let mut planner_prompt = base_planner
             .replace("{SYSTEM_PROMPT}", system_prompt)
             .replace("{CURRENT_TIME}", &current_time)
             .replace("{BRAIN_FILES}", &brain_files_md)
-            .replace("{SCHEDULES}", &schedule_files_md);
+            .replace("{SCHEDULES}", &schedule_files_md)
+            .replace("{SKILLS_RULES}", &skills_rules);
+        
+        if !planner_prompt.contains("[AVAILABLE CUSTOM SKILLS & RULES]") {
+             planner_prompt.push_str(&format!("\n\n{}", skills_rules));
+        }
 
         let mut history = vec![ChatMessage {
             role: "system".to_string(),
@@ -388,7 +401,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 };
                 let mut writer_history = history.clone();
                 writer_history.insert(0, writer_prompt);
-                writer_history.push(ChatMessage { role: "user".to_string(), content: format!("지금까지의 정보가 완벽히 검증되었습니다. 사용자를 위해 최종 답변을 {}로 작성해주세요.", lang_native), images_base64: None });
+                writer_history.push(ChatMessage { role: "user".to_string(), content: format!("The user's request has been fulfilled or the data is ready. Please provide the final response to the user in {}. DO NOT unnecessarily repeat conversational history. Focus ONLY on what was just done or discovered.", lang_name), images_base64: None });
 
                 let _ = log_tx
                     .send("[Writer] 최종 답변 정리 중...".to_string())
@@ -434,7 +447,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 let _ = log_tx.send(format!("[Critic] 검증 실패: {}", fb)).await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
-                    content: format!("여기는 시스템의 결과입니다.\n{}\n\n[Critic Agent Feedback]\nYour last tool executed, but the data is insufficient. Critic feedback: {}\nTry different keywords or tools.", result_summary_md, fb),
+                    content: format!("SYSTEM OBSERVATION RESULTS:\n{}\n\n[Critic Agent Feedback]\nYour last tool executed, but the task is not yet complete. Critic feedback: {}\nPlease use tools again with different strategies to fulfill the task.", result_summary_md, fb),
                     images_base64: None,
                 });
             }

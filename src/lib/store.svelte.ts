@@ -29,7 +29,11 @@ export interface LlmEndpoint {
 export const appState = $state({
   globalError: null as string | null,
   logExpanded: true,
-  sessionId: window.crypto.randomUUID().split('-')[0], // Use short UUID for filename
+  sessionId: (() => {
+    let now = new Date();
+    let pad = (n: number) => n.toString().padStart(2, '0');
+    return `${now.getFullYear().toString().slice(2)}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  })(),
   config: {
     isFirstRun: true,
     endpoints: [] as LlmEndpoint[],

@@ -1,22 +1,24 @@
-use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 
-use app_lib::agent::orchestrator::{Orchestrator, OrchestratorRouting};
-use app_lib::agent::multi_agent::MultiAgent;
 use app_lib::agent::llm_client::ChatMessage;
+use app_lib::agent::multi_agent::MultiAgent;
+use app_lib::agent::orchestrator::{Orchestrator, OrchestratorRouting};
 use app_lib::config::LlmEndpoint;
-use app_lib::tools::crawler::Crawler;
-use app_lib::tools::search::SearchTool;
 use app_lib::tools::brain::BrainTool;
-use app_lib::tools::terminal::TerminalTool;
+use app_lib::tools::crawler::Crawler;
 use app_lib::tools::knowledge::KnowledgeTool;
+use app_lib::tools::search::SearchTool;
 use app_lib::tools::telegram_tool::TelegramTool;
+use app_lib::tools::terminal::TerminalTool;
 
 // A simple mock HTTP server for mimicking OpenAI Chat Completions API
 async fn start_mock_llm_server(port: u16) {
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await.unwrap();
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port))
+        .await
+        .unwrap();
     let mut request_count = 0;
 
     tokio::spawn(async move {
@@ -46,7 +48,7 @@ async fn start_mock_llm_server(port: u16) {
                                 }
                             }]
                         })
-                    },
+                    }
                     2 => {
                         // 2. Planner reviews tool execution and exits loop
                         serde_json::json!({
@@ -58,7 +60,7 @@ async fn start_mock_llm_server(port: u16) {
                                 }
                             }]
                         })
-                    },
+                    }
                     _ => {
                         // 3. Writer synthesizes final output
                         serde_json::json!({
@@ -100,17 +102,26 @@ async fn test_native_tool_calling_e2e() {
 
     // Insert dummy artifact to test the brain tool
     let _ = db.insert("brain_artifacts", b"TestArtifact.md", b"Test Content");
-    
+
     // Tools Setup
     let crawler = Crawler::new();
-    let search_tool = SearchTool::new("".to_string(), "".to_string(), std::path::PathBuf::from("/"));
+    let search_tool = SearchTool::new(
+        "".to_string(),
+        "".to_string(),
+        std::path::PathBuf::from("/"),
+    );
     let brain_tool = BrainTool::new(Arc::clone(&db));
     let terminal_tool = TerminalTool::new(std::path::PathBuf::from("/"));
     let knowledge_tool = KnowledgeTool::new(Arc::clone(&db));
     let telegram_tool = TelegramTool::new(std::path::PathBuf::from("/"));
 
     let agent = Arc::new(MultiAgent::new(
-        crawler, search_tool, brain_tool, terminal_tool, knowledge_tool, telegram_tool
+        crawler,
+        search_tool,
+        brain_tool,
+        terminal_tool,
+        knowledge_tool,
+        telegram_tool,
     ));
 
     // Orchestrator Setup
@@ -134,7 +145,7 @@ async fn test_native_tool_calling_e2e() {
     };
 
     let (log_tx, mut log_rx) = tokio::sync::mpsc::channel(100);
-    
+
     // Launch log reader task to prevent channel blocking
     tokio::spawn(async move {
         while let Some(msg) = log_rx.recv().await {
@@ -146,7 +157,7 @@ async fn test_native_tool_calling_e2e() {
         routing,
         agent,
         std::path::PathBuf::from("/"),
-        Arc::clone(&db)
+        Arc::clone(&db),
     );
 
     let initial_message = vec![ChatMessage {
@@ -158,19 +169,22 @@ async fn test_native_tool_calling_e2e() {
     }];
 
     // Execute the E2E Agent Pipeline
-    let (final_response, history) = orchestrator.run_multi_agent_pipeline(
-        Some("test_session".to_string()),
-        "You are a helpful assistant",
-        None,
-        None,
-        None,
-        initial_message,
-        "en",
-        5,
-        None,
-        log_tx,
-        Arc::new(std::sync::atomic::AtomicBool::new(false))
-    ).await.unwrap();
+    let (final_response, history) = orchestrator
+        .run_multi_agent_pipeline(
+            Some("test_session".to_string()),
+            "You are a helpful assistant",
+            None,
+            None,
+            None,
+            initial_message,
+            "en",
+            5,
+            None,
+            log_tx,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )
+        .await
+        .unwrap();
 
     println!("E2E Final output: {}", final_response);
 
@@ -178,7 +192,7 @@ async fn test_native_tool_calling_e2e() {
     assert!(final_response.contains("FINAL RESPONSE"));
 
     // Check history length
-    // History should contain: 
+    // History should contain:
     // 1. Initial Prompt (System Planner)
     // 2. User Message
     // 3. Assistant Message (tool_calls invoking 'brain')
@@ -187,8 +201,13 @@ async fn test_native_tool_calling_e2e() {
     // 6. System Prompt (Writer config)
     // 7. Writer Request User formatting
     // 8. Assistant Message (FINAL RESPONSE)
-    
+
     // Check if the history correctly tracked the tool_call_id
-    let has_tool_resp = history.iter().any(|msg| msg.role == "tool" && msg.content.contains("TestArtifact.md"));
-    assert!(has_tool_resp, "History failed to record role: tool message correctly");
+    let has_tool_resp = history
+        .iter()
+        .any(|msg| msg.role == "tool" && msg.content.contains("TestArtifact.md"));
+    assert!(
+        has_tool_resp,
+        "History failed to record role: tool message correctly"
+    );
 }

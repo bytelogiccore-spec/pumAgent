@@ -102,6 +102,7 @@ impl Orchestrator {
         String,
         String,
         Vec<(String, crate::agent::scheduler::ScheduleConfig)>,
+        String,
     ) {
         let current_time = chrono::Local::now()
             .format("%Y-%m-%d %A %H:%M:%S")
@@ -119,11 +120,32 @@ impl Orchestrator {
             schedules_summary, status_summary
         );
 
+        let mut skills_rules = String::from("[AVAILABLE CUSTOM SKILLS & RULES]\nThe following modules are registered in your database. If a requested task matches these names, you MUST use the `knowledge` tool (action=\"read\") to read their exact instructions first:\n");
+        if let Ok(records) = self.db.scan("knowledge_base") {
+            let mut count = 0;
+            for (key, _) in records {
+                let k_str = String::from_utf8_lossy(&key);
+                if k_str.starts_with("skills:") || k_str.starts_with("rules:") || k_str.starts_with("workflows:") {
+                     let parts: Vec<&str> = k_str.split(':').collect();
+                     if parts.len() == 2 {
+                         skills_rules.push_str(&format!("- Domain: {}, Name: {}\n", parts[0], parts[1]));
+                         count += 1;
+                     }
+                }
+            }
+            if count == 0 {
+                skills_rules.push_str("- No custom skills or rules learned yet.\n");
+            }
+        } else {
+            skills_rules.push_str("- No custom skills or rules learned yet.\n");
+        }
+
         (
             current_time,
             brain_files_md,
             schedule_files_md,
             pending_tasks,
+            skills_rules,
         )
     }
 
@@ -151,7 +173,7 @@ impl Orchestrator {
         }
 
         let filename = match session_id {
-            Some(id) if !id.is_empty() => format!("{}_Session.md", id),
+            Some(id) if !id.is_empty() => format!("{}.md", id),
             _ => format!("Background_{}.md", Local::now().format("%y%m%d_%H%M%S")),
         };
 
@@ -164,7 +186,18 @@ impl Orchestrator {
         ));
         for msg in history {
             out.push_str(&format!("### Role: {}\n", msg.role.to_uppercase()));
-            out.push_str(&format!("{}\n\n---\n", msg.content));
+            
+            // Strip out <think> blocks for a cleaner markdown log
+            let mut clean_content = msg.content.clone();
+            while let Some(start) = clean_content.find("<think>") {
+                if let Some(end) = clean_content.find("</think>") {
+                    let full_block = &clean_content[start..end + "</think>".len()];
+                    clean_content = clean_content.replace(full_block, "");
+                } else {
+                    break;
+                }
+            }
+            out.push_str(&format!("{}\n\n---\n", clean_content.trim()));
         }
 
         // We truncate(true) because `history` contains the FULL array of messages from Svelte.

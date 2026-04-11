@@ -30,7 +30,9 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
    - If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE".
 
 [LONG TERM MEMORY (BRAIN)]
-{BRAIN_FILES}`;
+{BRAIN_FILES}
+
+{SKILLS_RULES}`;
 
 export const DEFAULT_CRITIC = `[CRITIC AGENT] Query: '{QUERY}'. Results:\n{RESULT_SUMMARY}\n\nIf facts fully answer query, reply 'STATUS: PASS'. If insufficient/irrelevant, reply 'STATUS: FAIL' + strict English feedback on what to search next (e.g., new keywords).`;
 

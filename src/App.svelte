@@ -7,6 +7,7 @@
   import ChatSection from "./components/ChatSection.svelte";
   import StartupWizard from "./components/StartupWizard.svelte";
   import ErrorPopup from "./components/ErrorPopup.svelte";
+  import Titlebar from "./components/Titlebar.svelte";
   import { appState, addLog, triggerHeartbeat } from "./lib/store.svelte";
   import { initLocales, t } from "./lib/i18n.svelte";
 
@@ -86,6 +87,7 @@
 </script>
 
 <main class="app-container">
+  <Titlebar />
   <ErrorPopup />
   {#if appState.config.isFirstRun}
     <StartupWizard />
