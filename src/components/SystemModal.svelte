@@ -1,15 +1,27 @@
 <script lang="ts">
-  import { appState, interceptSlashCommand } from "../lib/store.svelte";
+  import { appState, interceptSlashCommand, addLog } from "../lib/store.svelte";
   import SettingsForm from "./SettingsForm.svelte";
   import KnowledgeManager from "./KnowledgeManager.svelte";
   import { t } from "../lib/i18n.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+
+  async function onCloseClick() {
+    try {
+      await invoke("flush_db");
+      addLog(t("sys.db_flush"));
+    } catch (e) {
+      console.warn("Failed to flush db:", e);
+      addLog(t("sys.db_flush_err", { err: e }));
+    }
+    appState.sysModalOpen = false;
+  }
 </script>
 
 <div class="settings-overlay">
   <div class="sys-modal">
     <div class="settings-header">
       <h2>{appState.sysModalTitle}</h2>
-      <button class="close-btn" onclick={() => (appState.sysModalOpen = false)}>✕</button>
+      <button class="close-btn" onclick={onCloseClick}>✕</button>
     </div>
     <div class="sys-body" style="display: flex; flex-direction: row; height: 100%;">
       <!-- 1. 좌측 메인 내비게이션 -->

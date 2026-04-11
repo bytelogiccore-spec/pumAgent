@@ -76,13 +76,34 @@ pub async fn start_telegram_bot(
                     .await;
 
                 // Prepare Orchestrator
-                let llm = LLMClient::new(
+                let local_llm = LLMClient::new(
                     config.api_url.clone(),
                     config.model.clone(),
                     config.llm_api_key.clone(),
                 );
-                let orchestrator =
-                    Orchestrator::new(llm, multi_agent.clone(), base_dir.clone(), db.clone());
+                let cloud_llm = if config.cloud_api_url.is_empty() {
+                    local_llm.clone()
+                } else {
+                    LLMClient::new(
+                        config.cloud_api_url.clone(),
+                        config.cloud_model.clone(),
+                        config.cloud_llm_api_key.clone(),
+                    )
+                };
+                let routing_flags = super::orchestrator::CloudRoutingFlags {
+                    planner: config.cloud_routing_planner,
+                    critic: config.cloud_routing_critic,
+                    writer: config.cloud_routing_writer,
+                    worker: config.cloud_routing_worker,
+                };
+                let orchestrator = Orchestrator::new(
+                    local_llm,
+                    cloud_llm,
+                    routing_flags,
+                    multi_agent.clone(),
+                    base_dir.clone(),
+                    db.clone(),
+                );
 
                 let user_msgs = vec![ChatMessage {
                     role: "user".to_string(),
@@ -106,6 +127,7 @@ pub async fn start_telegram_bot(
                 // Execute the agent pipeline wrapper
                 let res = orchestrator
                     .run_loop(
+                        Some(format!("Telegram_{}", msg.chat.id)),
                         &config.system_prompt,
                         config.planner_prompt.as_deref(),
                         config.critic_prompt.as_deref(),
@@ -114,6 +136,7 @@ pub async fn start_telegram_bot(
                         &config.language,
                         config.max_loops,
                         config.use_multi_agent_workflow,
+                        config.registry_prompt.as_deref(),
                         log_tx,
                         cancel_flag,
                     )

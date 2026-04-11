@@ -47,10 +47,10 @@
   }
 
   let nextExecutionText = $derived.by(() => {
-    if (!scheduleData || !scheduleData.interval_seconds) return "설정되지 않음 (수동 실행 혹은 대기 안함)";
+    if (!scheduleData || !scheduleData.interval_seconds) return t("knowledge.sched_not_set");
     let baseTime = scheduleData.last_run ? new Date(scheduleData.last_run) : new Date();
     let nextTime = new Date(baseTime.getTime() + scheduleData.interval_seconds * 1000);
-    return nextTime.toLocaleString("ko-KR", { dateStyle: "long", timeStyle: "medium" }) + " 예정";
+    return t("knowledge.sched_next", { time: nextTime.toLocaleString(appState.config.language === "ko" ? "ko-KR" : "en-US", { dateStyle: "long", timeStyle: "medium" }) });
   });
 </script>
 
@@ -109,32 +109,32 @@
       {:else if scheduleData}
         <div class="schedule-form" style="flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
           <div class="form-group">
-            <label for="schedName">스케줄 이름 (필수)</label>
-            <input id="schedName" type="text" bind:value={scheduleData.name} oninput={syncScheduleData} placeholder="예: 매일 뉴스 요약" />
+            <label for="schedName">{t("knowledge.label_name")}</label>
+            <input id="schedName" type="text" bind:value={scheduleData.name} oninput={syncScheduleData} placeholder={t("knowledge.ph_name")} />
           </div>
           <div style="display: flex; gap: 16px;">
             <div class="form-group" style="flex: 1;">
-              <label for="schedInterval">반복 간격 (Interval 초)</label>
-              <input id="schedInterval" type="number" bind:value={scheduleData.interval_seconds} oninput={syncScheduleData} placeholder="예: 3600" />
+              <label for="schedInterval">{t("knowledge.label_interval")}</label>
+              <input id="schedInterval" type="number" bind:value={scheduleData.interval_seconds} oninput={syncScheduleData} placeholder={t("knowledge.ph_interval")} />
             </div>
             <div class="form-group" style="flex: 1;">
-              <label for="schedEndDate">최종 종료일시 (선택)</label>
-              <input id="schedEndDate" type="text" bind:value={scheduleData.end_date} oninput={syncScheduleData} placeholder="비워두면 무한반복 (YYYY-MM-DD...)" />
+              <label for="schedEndDate">{t("knowledge.label_end")}</label>
+              <input id="schedEndDate" type="text" bind:value={scheduleData.end_date} oninput={syncScheduleData} placeholder={t("knowledge.ph_end")} />
             </div>
             <div class="form-group" style="flex: 1;">
-              <label>다음 업데이트 타임</label>
+              <label>{t("knowledge.label_next_time")}</label>
               <div style="padding: 8px 12px; background: #e0f2fe; color: #0369a1; border-radius: 6px; font-weight: 600; font-size: 0.85rem; border: 1px solid #bae6fd;">
                 🕒 {nextExecutionText}
               </div>
             </div>
           </div>
           <div class="form-group">
-            <label for="schedDesc">설명</label>
-            <input id="schedDesc" type="text" bind:value={scheduleData.description} oninput={syncScheduleData} placeholder="스케줄 동작에 대한 짧은 메모" />
+            <label for="schedDesc">{t("knowledge.label_desc")}</label>
+            <input id="schedDesc" type="text" bind:value={scheduleData.description} oninput={syncScheduleData} placeholder={t("knowledge.ph_desc")} />
           </div>
           <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
-            <label for="schedTask">작업 지시문 (Task Prompt)</label>
-            <textarea id="schedTask" bind:value={scheduleData.task_prompt} oninput={syncScheduleData} placeholder="LLM에게 내릴 구체적인 작업 지시문..." style="flex: 1; min-height: 150px; font-family: 'Inter', sans-serif; resize: none; padding: 12px; border: 1px solid #ccc; background: #fff;"></textarea>
+            <label for="schedTask">{t("knowledge.label_task")}</label>
+            <textarea id="schedTask" bind:value={scheduleData.task_prompt} oninput={syncScheduleData} placeholder={t("knowledge.ph_task")} style="flex: 1; min-height: 150px; font-family: 'Inter', sans-serif; resize: none; padding: 12px; border: 1px solid #ccc; background: #fff;"></textarea>
           </div>
           <div class="form-group">
             <label for="schedView">최근 실행 기록보기 (Raw JSON)</label>

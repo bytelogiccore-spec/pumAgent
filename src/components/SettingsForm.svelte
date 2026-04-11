@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEFAULT_PLANNER, DEFAULT_CRITIC, DEFAULT_WRITER, DEFAULT_REFLECTOR, DEFAULT_HEARTBEAT } from "../lib/constants";
+  import { DEFAULT_PLANNER, DEFAULT_CRITIC, DEFAULT_WRITER, DEFAULT_REFLECTOR, DEFAULT_HEARTBEAT, DEFAULT_WORKER, DEFAULT_REGISTRY } from "../lib/constants";
   import { appState, saveSettings } from "../lib/store.svelte";
   import { t, initLocales } from "../lib/i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -74,6 +74,42 @@
       <input type="text" bind:value={appState.config.model} />
     </label>
   </div>
+  
+  <div style="margin-bottom: 24px; padding: 12px; border: 1px dashed #3f3f46; border-radius: 4px; background: rgba(0,0,0,0.2);">
+    <div style="font-size: 0.9rem; font-weight: 500; color: #a1a1aa; margin-bottom: 8px;">☁️ Secondary Engine (Cloud / OpenRouter) - Optional</div>
+    <div style="font-size: 0.75rem; color: #71717a; margin-bottom: 12px;">Used exclusively for high-reasoning tasks like Critic and Writer to save VRAM and improve quality.</div>
+    <div class="form-group">
+      <label>Cloud API URL
+        <input type="text" bind:value={appState.config.cloudApiUrl} placeholder="https://openrouter.ai/api/v1" />
+      </label>
+    </div>
+    <div class="form-group" style="display:flex; gap: 8px;">
+      <label style="flex:1;">Cloud API Key
+        <input type="password" bind:value={appState.config.cloudLlmApiKey} placeholder="sk-or-v1-..." />
+      </label>
+      <label style="flex:1;">Cloud Model
+        <input type="text" bind:value={appState.config.cloudModel} placeholder="anthropic/claude-3-opus-20240229" />
+      </label>
+    </div>
+    <div style="margin-top: 16px; border-top: 1px solid #3f3f46; padding-top: 12px;">
+      <div style="font-size: 0.85rem; font-weight: 500; color: #d4d4d8; margin-bottom: 8px;">Cloud Assigned Roles</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 6px;">
+          <input type="checkbox" bind:checked={appState.config.cloudRoutingCritic} /> {t("settings.role_critic")}
+        </label>
+        <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 6px;">
+          <input type="checkbox" bind:checked={appState.config.cloudRoutingWriter} /> {t("settings.role_writer")}
+        </label>
+        <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 6px;">
+          <input type="checkbox" bind:checked={appState.config.cloudRoutingPlanner} /> {t("settings.role_planner")}
+        </label>
+        <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 6px;">
+          <input type="checkbox" bind:checked={appState.config.cloudRoutingWorker} /> {t("settings.role_worker")}
+        </label>
+      </div>
+    </div>
+  </div>
+
   <div class="form-group">
     <label>{t("form.maxLoops")}
       <input type="number" min="1" max="10" bind:value={appState.config.maxLoops} />
@@ -136,6 +172,15 @@
     <label style="display:flex; justify-content:space-between;">{t("form.reflectorPrompt")} <button class="sys-badge" onclick={() => (appState.config.reflectorPrompt = DEFAULT_REFLECTOR)}>[RESET]</button></label>
     <textarea bind:value={appState.config.reflectorPrompt} rows="3"></textarea>
   </div>
+  <hr style="border: 0; border-top: 1px dashed #27272a; margin: 16px 0;" />
+  <div class="form-group">
+    <label style="display:flex; justify-content:space-between;">Background Worker Prompt <button class="sys-badge" onclick={() => (appState.config.workerPrompt = DEFAULT_WORKER)}>[RESET]</button></label>
+    <textarea bind:value={appState.config.workerPrompt} rows="4"></textarea>
+  </div>
+  <div class="form-group">
+    <label style="display:flex; justify-content:space-between;">Architecture Registry Agent <button class="sys-badge" onclick={() => (appState.config.registryPrompt = DEFAULT_REGISTRY)}>[RESET]</button></label>
+    <textarea bind:value={appState.config.registryPrompt} rows="4"></textarea>
+  </div>
   {/if}
 
   {#if appState.sysModalDomain === "setting_heartbeat"}
@@ -167,9 +212,9 @@
     </label>
     <div style="font-size:0.8rem; color:#ef4444; margin-top:4px; font-weight:600;">{t("form.telegramDesc")}</div>
     {#if appState.config.telegramChatId}
-      <div style="font-size:0.85rem; color:#10b981; margin-top:8px; font-weight:600;">✅ 모바일 푸시 알림 연동 완료 (Chat ID: {appState.config.telegramChatId})</div>
+      <div style="font-size:0.85rem; color:#10b981; margin-top:8px; font-weight:600;">{t("settings.telegram_ok", { id: appState.config.telegramChatId })}</div>
     {:else}
-      <div style="font-size:0.85rem; color:#f59e0b; margin-top:8px; font-weight:600;">⚠️ 봇 등록 후 텔레그램에서 첫 메시지를 보내야 푸시 알림이 활성화됩니다.</div>
+      <div style="font-size:0.85rem; color:#f59e0b; margin-top:8px; font-weight:600;">{t("settings.telegram_wait")}</div>
     {/if}
   </div>
   {/if}

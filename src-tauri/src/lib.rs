@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod tools;
+pub mod commands;
 
 use agent::llm_client::{ChatMessage, LLMClient};
 use agent::multi_agent::MultiAgent;
@@ -16,6 +17,7 @@ use tools::knowledge::KnowledgeTool;
 use tools::search::SearchTool;
 use tools::telegram_tool::TelegramTool;
 use tools::terminal::TerminalTool;
+use commands::fs::*;
 
 pub struct AgentState {
     pub multi_agent: Arc<MultiAgent>,
@@ -27,8 +29,16 @@ pub struct AgentState {
 #[derive(Deserialize)]
 struct RunPayload {
     api_url: String,
+    session_id: Option<String>,
     llm_api_key: Option<String>,
     model: String,
+    cloud_api_url: String,
+    cloud_model: String,
+    cloud_llm_api_key: Option<String>,
+    cloud_routing_planner: bool,
+    cloud_routing_critic: bool,
+    cloud_routing_writer: bool,
+    cloud_routing_worker: bool,
     system_prompt: String,
     planner_prompt: Option<String>,
     critic_prompt: Option<String>,
@@ -36,7 +46,10 @@ struct RunPayload {
     reflector_prompt: Option<String>,
     max_loops: u32,
     use_multi_agent_workflow: bool,
+    use_think_mode: bool,
     language: String,
+    worker_prompt: Option<String>,
+    registry_prompt: Option<String>,
     messages: Vec<ChatMessage>,
 }
 
@@ -73,21 +86,51 @@ async fn execute_agent_tools(
 
     // Orchestrator needs LLM + MultiAgent + base_dir
     let llm_key = payload.llm_api_key.clone().unwrap_or_default();
-    let llm = LLMClient::new(
+    let local_llm = LLMClient::new(
         payload.api_url.clone(),
         payload.model.clone(),
         llm_key.clone(),
     );
+    let cloud_key = payload.cloud_llm_api_key.clone().unwrap_or_default();
+    let cloud_llm = if payload.cloud_api_url.is_empty() {
+        local_llm.clone()
+    } else {
+        LLMClient::new(
+            payload.cloud_api_url.clone(),
+            payload.cloud_model.clone(),
+            cloud_key,
+        )
+    };
+
+    let routing_flags = agent::orchestrator::CloudRoutingFlags {
+        planner: payload.cloud_routing_planner,
+        critic: payload.cloud_routing_critic,
+        writer: payload.cloud_routing_writer,
+        worker: payload.cloud_routing_worker,
+    };
+
     let orchestrator = Orchestrator::new(
-        llm,
+        local_llm,
+        cloud_llm,
+        routing_flags,
         Arc::clone(&state.multi_agent),
         state.base_dir.clone(),
         state.db.clone(),
     );
 
+    let mut actual_system_prompt = payload.worker_prompt.unwrap_or(payload.system_prompt);
+    actual_system_prompt.push_str(&format!(
+        "\n\n[GLOBAL RULE]\nCRITICAL: Any content intended for the user (such as final output or Telegram notifications) MUST be composed in {}.",
+        payload.language
+    ));
+    if !payload.use_think_mode {
+        actual_system_prompt.push_str("\n\n!! CRITICAL DIRECTIVE !!\nDO NOT OUTPUT ANY REASONING, THINKING, OR THOUGHT BLOCKS. DO NOT USE <think> OR SIMILAR TAGS. PROVIDE YOUR FINAL RESPONSE DIRECTLY AND IMMEDIATELY.");
+    }
+
     let (final_answer, history) = orchestrator
         .run_loop(
-            &payload.system_prompt,
+            payload.session_id.clone(),
+            &actual_system_prompt,
             payload.planner_prompt.as_deref(),
             payload.critic_prompt.as_deref(),
             payload.writer_prompt.as_deref(),
@@ -95,6 +138,7 @@ async fn execute_agent_tools(
             &payload.language,
             payload.max_loops,
             payload.use_multi_agent_workflow,
+            payload.registry_prompt.as_deref(),
             tx.clone(),
             Arc::clone(&state.cancel_flag),
         )
@@ -109,9 +153,23 @@ async fn execute_agent_tools(
         if let Some(reflector_prompt) = payload.reflector_prompt {
             let log_tx = tx.clone();
             // Clone orchestrator state so it can be moved into the async block
-            let llm = LLMClient::new(payload.api_url, payload.model, llm_key.clone());
+            let local_llm = LLMClient::new(payload.api_url, payload.model, llm_key.clone());
+            let cloud_key = payload.cloud_llm_api_key.clone().unwrap_or_default();
+            let cloud_llm = if payload.cloud_api_url.is_empty() {
+                local_llm.clone()
+            } else {
+                LLMClient::new(payload.cloud_api_url, payload.cloud_model, cloud_key)
+            };
+            let routing_flags = agent::orchestrator::CloudRoutingFlags {
+                planner: payload.cloud_routing_planner,
+                critic: payload.cloud_routing_critic,
+                writer: payload.cloud_routing_writer,
+                worker: payload.cloud_routing_worker,
+            };
             let bg_orchestrator = Orchestrator::new(
-                llm,
+                local_llm,
+                cloud_llm,
+                routing_flags,
                 Arc::clone(&state.multi_agent),
                 state.base_dir.clone(),
                 state.db.clone(),
@@ -127,6 +185,108 @@ async fn execute_agent_tools(
     Ok(OrchestratorResponse {
         final_output: final_answer,
     })
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct BackgroundPayload {
+    api_url: String,
+    session_id: Option<String>,
+    llm_api_key: Option<String>,
+    model: String,
+    cloud_api_url: String,
+    cloud_model: String,
+    cloud_llm_api_key: Option<String>,
+    cloud_routing_planner: bool,
+    cloud_routing_critic: bool,
+    cloud_routing_writer: bool,
+    cloud_routing_worker: bool,
+    system_prompt: String,
+    planner_prompt: Option<String>,
+    critic_prompt: Option<String>,
+    writer_prompt: Option<String>,
+    reflector_prompt: Option<String>,
+    max_loops: u32,
+    use_multi_agent_workflow: bool,
+    language: String,
+    worker_prompt: Option<String>,
+    registry_prompt: Option<String>,
+}
+
+#[tauri::command]
+async fn execute_background_scheduler(
+    payload: BackgroundPayload,
+    state: State<'_, AgentState>,
+    app: AppHandle,
+) -> Result<String, String> {
+    let scheduler = crate::agent::scheduler::Scheduler::new(state.db.clone());
+    let (pending_tasks, _, _) = scheduler.evaluate_schedules();
+
+    if pending_tasks.is_empty() {
+        return Ok("No tasks".to_string());
+    }
+
+    let llm_key = payload.llm_api_key.clone().unwrap_or_default();
+    let local_llm = LLMClient::new(payload.api_url, payload.model, llm_key.clone());
+    let cloud_key = payload.cloud_llm_api_key.clone().unwrap_or_default();
+    let cloud_llm = if payload.cloud_api_url.is_empty() {
+        local_llm.clone()
+    } else {
+        LLMClient::new(payload.cloud_api_url, payload.cloud_model, cloud_key)
+    };
+
+    let multi_agent = Arc::clone(&state.multi_agent);
+    let base_dir = state.base_dir.clone();
+    let db = state.db.clone();
+    let cancel_flag = state.cancel_flag.clone();
+
+    let sys = payload.system_prompt;
+    let planner = payload.planner_prompt;
+    let critic = payload.critic_prompt;
+    let writer = payload.writer_prompt;
+    let max_loops = payload.max_loops;
+    let use_multi = payload.use_multi_agent_workflow;
+    let lang = payload.language;
+    let registry = payload.registry_prompt;
+    let worker = payload.worker_prompt;
+    let session_id = payload.session_id;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
+    let app_clone = app.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            let _ = app_clone.emit("tool_log", format!("[백그라운드] {}", msg));
+        }
+    });
+
+    let routing_flags = agent::orchestrator::CloudRoutingFlags {
+        planner: payload.cloud_routing_planner,
+        critic: payload.cloud_routing_critic,
+        writer: payload.cloud_routing_writer,
+        worker: payload.cloud_routing_worker,
+    };
+
+    tokio::spawn(async move {
+        let orchestrator = Orchestrator::new(local_llm, cloud_llm, routing_flags, multi_agent, base_dir, db);
+        let _ = orchestrator
+            .run_loop(
+                session_id,
+                &worker.unwrap_or(sys),
+                planner.as_deref(),
+                critic.as_deref(),
+                writer.as_deref(),
+                vec![], // Empty history naturally triggers step 1 pending injection
+                &lang,
+                max_loops,
+                use_multi,
+                registry.as_deref(),
+                tx,
+                cancel_flag,
+            )
+            .await;
+    });
+
+    Ok("Started".to_string())
 }
 
 #[derive(Deserialize)]
@@ -188,6 +348,10 @@ fn default_is_first_run() -> bool {
     true
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AppConfig {
     #[serde(default = "default_is_first_run")]
@@ -196,6 +360,20 @@ pub struct AppConfig {
     pub model: String,
     #[serde(default)]
     pub llm_api_key: String,
+    #[serde(default)]
+    pub cloud_api_url: String,
+    #[serde(default)]
+    pub cloud_model: String,
+    #[serde(default)]
+    pub cloud_llm_api_key: String,
+    #[serde(default)]
+    pub cloud_routing_planner: bool,
+    #[serde(default = "default_true")]
+    pub cloud_routing_critic: bool,
+    #[serde(default = "default_true")]
+    pub cloud_routing_writer: bool,
+    #[serde(default)]
+    pub cloud_routing_worker: bool,
     pub max_loops: u32,
     pub system_prompt: String,
     #[serde(default = "default_search_provider")]
@@ -210,6 +388,8 @@ pub struct AppConfig {
     pub google_cx: String,
     #[serde(default)]
     pub use_multi_agent_workflow: bool,
+    #[serde(default)]
+    pub use_think_mode: bool,
 
     #[serde(default)]
     pub planner_prompt: Option<String>,
@@ -221,6 +401,10 @@ pub struct AppConfig {
     pub reflector_prompt: Option<String>,
     #[serde(default)]
     pub heartbeat_prompt: Option<String>,
+    #[serde(default)]
+    pub worker_prompt: Option<String>,
+    #[serde(default)]
+    pub registry_prompt: Option<String>,
 
     #[serde(default)]
     pub heartbeat_enabled: bool,
@@ -254,6 +438,13 @@ impl AppConfig {
             api_url: "http://127.0.0.1:8000/v1/chat/completions".to_string(),
             model: "gemma-4".to_string(),
             llm_api_key: "".to_string(),
+            cloud_api_url: "".to_string(),
+            cloud_model: "anthropic/claude-3-opus-20240229".to_string(),
+            cloud_llm_api_key: "".to_string(),
+            cloud_routing_planner: false,
+            cloud_routing_critic: true,
+            cloud_routing_writer: true,
+            cloud_routing_worker: false,
             max_loops: 20,
             system_prompt: "You are a highly capable autonomous AI assistant. Think clearly, step-by-step, and strictly follow the formatting rules to achieve the user's goal.".to_string(),
             search_provider: "duckduckgo".to_string(),
@@ -262,11 +453,14 @@ impl AppConfig {
             google_api_key: "".to_string(),
             google_cx: "".to_string(),
             use_multi_agent_workflow: false,
+            use_think_mode: false,
             planner_prompt: None,
             critic_prompt: None,
             writer_prompt: None,
             reflector_prompt: None,
             heartbeat_prompt: None,
+            worker_prompt: None,
+            registry_prompt: None,
             heartbeat_enabled: false,
             heartbeat_interval: 3600,
             telegram_enabled: false,
@@ -289,143 +483,11 @@ fn save_config(config: AppConfig, state: State<'_, AgentState>) -> Result<(), St
     Ok(())
 }
 
-#[tauri::command]
-fn list_brain_artifacts(state: State<'_, AgentState>) -> Result<Vec<String>, String> {
-    let mut files = vec![];
-    if let Ok(entries) = state.db.scan("brain_artifacts") {
-        for (key, _) in entries {
-            if let Ok(name) = String::from_utf8(key) {
-                files.push(name);
-            }
-        }
-    }
-    Ok(files)
-}
+
 
 #[tauri::command]
-fn read_brain_artifact(name: String, state: State<'_, AgentState>) -> Result<String, String> {
-    match state.db.get("brain_artifacts", name.as_bytes()) {
-        Ok(Some(bytes)) => String::from_utf8(bytes).map_err(|e| e.to_string()),
-        Ok(None) => Err("Not found".to_string()),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-#[tauri::command]
-fn write_brain_artifact(
-    name: String,
-    content: String,
-    state: State<'_, AgentState>,
-) -> Result<(), String> {
-    let res = state
-        .db
-        .insert("brain_artifacts", name.as_bytes(), content.as_bytes())
-        .map_err(|e| e.to_string());
-    let _ = state.db.flush();
-    res
-}
-
-#[tauri::command]
-fn delete_brain_artifact(name: String, state: State<'_, AgentState>) -> Result<(), String> {
-    let res = state
-        .db
-        .delete("brain_artifacts", name.as_bytes())
-        .map(|_| ())
-        .map_err(|e| e.to_string());
-    let _ = state.db.flush();
-    res
-}
-
-#[tauri::command]
-fn list_logs(state: State<'_, AgentState>) -> Result<Vec<String>, String> {
-    let mut logs = vec![];
-    if let Ok(entries) = fs::read_dir(state.base_dir.join("logs")) {
-        for entry in entries.flatten() {
-            if let Ok(name) = entry.file_name().into_string() {
-                logs.push(name);
-            }
-        }
-    }
-    logs.sort_by(|a, b| b.cmp(a)); // Descending sorting
-    Ok(logs)
-}
-
-#[tauri::command]
-fn read_log(name: String, state: State<'_, AgentState>) -> Result<String, String> {
-    fs::read_to_string(state.base_dir.join("logs").join(name)).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn delete_logs(names: Vec<String>, state: State<'_, AgentState>) -> Result<(), String> {
-    for name in names {
-        let path = state.base_dir.join("logs").join(&name);
-        if let Err(e) = fs::remove_file(path) {
-            eprintln!("Failed to delete log {}: {}", name, e);
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn list_knowledge(domain: String, state: State<'_, AgentState>) -> Result<Vec<String>, String> {
-    let mut files = vec![];
-    let prefix = format!("{}:", domain);
-    if let Ok(entries) = state.db.scan("knowledge_base") {
-        for (key, _) in entries {
-            if let Ok(name) = String::from_utf8(key) {
-                if name.starts_with(&prefix) {
-                    files.push(name.replace(&prefix, ""));
-                }
-            }
-        }
-    }
-    Ok(files)
-}
-
-#[tauri::command]
-fn read_knowledge(
-    domain: String,
-    name: String,
-    state: State<'_, AgentState>,
-) -> Result<String, String> {
-    let key = format!("{}:{}", domain, name);
-    match state.db.get("knowledge_base", key.as_bytes()) {
-        Ok(Some(bytes)) => String::from_utf8(bytes).map_err(|e| e.to_string()),
-        Ok(None) => Err("Not found".into()),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-#[tauri::command]
-fn write_knowledge(
-    domain: String,
-    name: String,
-    content: String,
-    state: State<'_, AgentState>,
-) -> Result<(), String> {
-    let key = format!("{}:{}", domain, name);
-    let res = state
-        .db
-        .insert("knowledge_base", key.as_bytes(), content.as_bytes())
-        .map_err(|e| e.to_string());
-    let _ = state.db.flush();
-    res
-}
-
-#[tauri::command]
-fn delete_knowledge(
-    domain: String,
-    name: String,
-    state: State<'_, AgentState>,
-) -> Result<(), String> {
-    let key = format!("{}:{}", domain, name);
-    let res = state
-        .db
-        .delete("knowledge_base", key.as_bytes())
-        .map(|_| ())
-        .map_err(|e| e.to_string());
-    let _ = state.db.flush();
-    res
+fn flush_db(state: State<'_, AgentState>) -> Result<(), String> {
+    state.db.flush().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -434,7 +496,8 @@ async fn translate_i18n(
     state: State<'_, AgentState>,
 ) -> Result<String, String> {
     let config = AppConfig::load(&state.base_dir);
-    let llm = crate::agent::llm_client::LLMClient::new(config.api_url, config.model, config.llm_api_key);
+    let llm =
+        crate::agent::llm_client::LLMClient::new(config.api_url, config.model, config.llm_api_key);
 
     let en_content = match state.db.get("knowledge_base", b"locales:en.json") {
         Ok(Some(bytes)) => String::from_utf8(bytes).unwrap_or_default(),
@@ -473,11 +536,17 @@ async fn translate_i18n(
     result_json = result_json.trim().to_string();
 
     if let Err(e) = serde_json::from_str::<serde_json::Value>(&result_json) {
-        return Err(format!("Failed to parse LLM output as JSON: {}. Output: {}", e, result_json));
+        return Err(format!(
+            "Failed to parse LLM output as JSON: {}. Output: {}",
+            e, result_json
+        ));
     }
 
     let key = format!("locales:{}.json", target_lang);
-    state.db.insert("knowledge_base", key.as_bytes(), result_json.as_bytes()).map_err(|e| e.to_string())?;
+    state
+        .db
+        .insert("knowledge_base", key.as_bytes(), result_json.as_bytes())
+        .map_err(|e| e.to_string())?;
     let _ = state.db.flush();
 
     Ok(result_json)
@@ -486,6 +555,14 @@ async fn translate_i18n(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let Some(state) = window.try_state::<AgentState>() {
+                    let _ = state.db.flush();
+                    println!("[PumAgent] Window closing, performed DB flush for safety.");
+                }
+            }
+        })
         .setup(|app| {
             #[cfg(debug_assertions)]
             let base_dir = std::env::current_dir()
@@ -599,16 +676,20 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let mut last_tick = tokio::time::Instant::now();
                 loop {
-                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     let config = AppConfig::load(&base_dir);
                     if config.heartbeat_enabled && config.heartbeat_interval > 0 {
-                        if last_tick.elapsed().as_secs() >= config.heartbeat_interval {
+                        let elapsed = last_tick.elapsed().as_secs();
+                        let remaining = config.heartbeat_interval.saturating_sub(elapsed);
+                        let _ = app_handle.emit("heartbeat_progress", remaining);
+
+                        if elapsed >= config.heartbeat_interval {
                             last_tick = tokio::time::Instant::now();
                             let _ = app_handle.emit("heartbeat_tick", ());
                         }
                     } else {
-                        // Keep last_tick fresh if disabled to prevent immediate fire upon re-enable
                         last_tick = tokio::time::Instant::now();
+                        let _ = app_handle.emit("heartbeat_progress", 0u64);
                     }
                 }
             });
@@ -617,6 +698,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             execute_agent_tools,
+            execute_background_scheduler,
             compress_memory,
             load_config,
             save_config,
@@ -631,9 +713,42 @@ pub fn run() {
             read_knowledge,
             write_knowledge,
             delete_knowledge,
+            flush_db,
             translate_i18n,
             stop_agent
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dump_dbx_contents() {
+        let db_path = std::env::current_dir()
+            .unwrap()
+            .join("..")
+            .join("PumAgentData")
+            .join("pumagent_store.dbx");
+        
+        let db = dbx_core::Database::open(&db_path).unwrap();
+        println!("--- BRAIN ARTIFACTS ---");
+        if let Ok(entries) = db.scan("brain_artifacts") {
+            for (k, v) in entries {
+                println!("KEY: {}", String::from_utf8_lossy(&k));
+                println!("VAL: {}\n", String::from_utf8_lossy(&v));
+            }
+        }
+        println!("--- SCHEDULES (knowledge_base) ---");
+        if let Ok(entries) = db.scan("knowledge_base") {
+            for (k, v) in entries {
+                if k.starts_with(b"schedules:") {
+                    println!("KEY: {}", String::from_utf8_lossy(&k));
+                    println!("VAL: {}\n", String::from_utf8_lossy(&v));
+                }
+            }
+        }
+    }
 }

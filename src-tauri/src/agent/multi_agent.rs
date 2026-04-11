@@ -45,7 +45,12 @@ impl MultiAgent {
         }
     }
 
-    pub async fn execute_tools(&self, requests: Vec<Value>) -> Vec<ToolResult> {
+    pub async fn execute_tools(
+        &self,
+        requests: Vec<Value>,
+        llm: Option<crate::agent::llm_client::LLMClient>,
+        registry_prompt: Option<String>,
+    ) -> Vec<ToolResult> {
         let mut handles = vec![];
 
         for req in requests {
@@ -83,6 +88,8 @@ impl MultiAgent {
             let knowledge_tool = Arc::clone(&self.knowledge_tool);
             let telegram_tool = Arc::clone(&self.telegram_tool);
 
+            let llm_clone = llm.clone();
+            let registry_prompt_clone = registry_prompt.clone();
             let handle = task::spawn(async move {
                 match tool.as_str() {
                     "crawl4ai" => {
@@ -216,9 +223,46 @@ impl MultiAgent {
                                 }
                             }
                             "write" => {
-                                let content =
-                                    args.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                                let result = knowledge_tool.write(domain, name, content);
+                                let mut content = args
+                                    .get("content")
+                                    .and_then(|c| c.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+
+                                // Intercept for JSON schemas using Registry Agent
+                                if (domain == "schedules" || domain == "skills" || domain == "rules")
+                                    && serde_json::from_str::<Value>(&content).is_err() {
+                                        if let (Some(client), Some(prompt)) =
+                                            (&llm_clone, &registry_prompt_clone)
+                                        {
+                                            let now_str = chrono::Local::now()
+                                                .format("%Y-%m-%d %A %H:%M:%S")
+                                                .to_string();
+                                            let prompt_with_context = format!("{}\n\n[SYSTEM TIME ANCHOR]\nCurrent System Time: {}\n\nUser Request to convert to JSON:\n{}", prompt, now_str, content);
+                                            let msgs =
+                                                vec![crate::agent::llm_client::ChatMessage {
+                                                    role: "user".to_string(),
+                                                    content: prompt_with_context,
+                                                    images_base64: None,
+                                                }];
+                                            if let Ok(res) = client.chat(&msgs, 0.1).await {
+                                                let ai_text = crate::agent::orchestrator::Orchestrator::sanitize_output(&res.content);
+                                                let json_blocks =
+                                                    crate::agent::parser::extract_json_blocks(
+                                                        &ai_text,
+                                                    );
+                                                if let Some(first_block) = json_blocks.first() {
+                                                    content =
+                                                        serde_json::to_string_pretty(first_block)
+                                                            .unwrap_or(content);
+                                                } else {
+                                                    content = ai_text;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                let result = knowledge_tool.write(domain, name, &content);
                                 ToolResult {
                                     tool_name: tool,
                                     action,

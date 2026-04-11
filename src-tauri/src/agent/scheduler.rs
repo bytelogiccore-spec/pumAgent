@@ -55,7 +55,7 @@ impl Scheduler {
                                     .last_run
                                     .as_ref()
                                     .and_then(|s| s.parse::<DateTime<Utc>>().ok());
-                                    
+
                                 let mut is_expired = false;
                                 if let Some(end_str) = &sched.end_date {
                                     if let Ok(end_dt) = end_str.parse::<DateTime<Utc>>() {
@@ -82,7 +82,8 @@ impl Scheduler {
                                                 .to_string();
                                         } else {
                                             should_run = true;
-                                            let next = now + chrono::Duration::seconds(interval as i64);
+                                            let next =
+                                                now + chrono::Duration::seconds(interval as i64);
                                             next_exec = next
                                                 .with_timezone(&Local)
                                                 .format("%Y-%m-%d %H:%M:%S")

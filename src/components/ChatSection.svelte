@@ -17,6 +17,7 @@
     compressChatMemory,
   } from "../lib/store.svelte";
   import { t } from "../lib/i18n.svelte";
+  import ChatMessage from "./ChatMessage.svelte";
   let fileInput: HTMLInputElement;
 
   async function handleFileSelect(e: Event) {
@@ -150,6 +151,7 @@
 
   let viewingLogs = $state<string[] | null>(null);
 
+
 </script>
 
 {#if viewingLogs}
@@ -207,27 +209,12 @@
 
   <div class="chat-box" bind:this={appState.chatBoxElement}>
     {#each appState.messages as msg}
-      <div class="message {msg.role}">
-        <div class="avatar">{msg.role === "assistant" ? "🤖" : "🧑‍💻"}</div>
-        <div class="bubble" style="display:flex; flex-direction:column; gap:8px;">
-          {#if appState.isThinking && msg.role === "assistant" && msg === appState.messages[appState.messages.length - 1]}
-            <span class="thinking-text" style="color: #6b7280; font-size: 0.9rem; font-style: italic;">
-              {msg.logs && msg.logs.length > 0 ? msg.logs[msg.logs.length - 1] : "Thinking..."}
-            </span>
-          {:else}
-            <div>
-              {@html DOMPurify.sanitize(marked.parse(msg.content) as string, { ADD_ATTR: ['target'] })}
-            </div>
-            {#if msg.logs && msg.logs.length > 0}
-              <div style="margin-top: 8px; border-top: 1px dashed #d1d5db; padding-top: 8px;">
-                <button onclick={() => (viewingLogs = msg.logs || null)} style="background:transparent; border:1px solid #9ca3af; border-radius:4px; font-size:0.75rem; cursor:pointer; color:#4b5563;">
-                  📄 View Steps ({msg.logs.length})
-                </button>
-              </div>
-            {/if}
-          {/if}
-        </div>
-      </div>
+      <ChatMessage 
+        {msg} 
+        isThinking={appState.isThinking} 
+        isLast={msg === appState.messages[appState.messages.length - 1]} 
+        onViewLogs={(logs) => { viewingLogs = logs; }} 
+      />
     {/each}
   </div>
 
@@ -274,7 +261,7 @@
                     <svg class="file-icon-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                   {/if}
                   <div class="file-name" title={file.name}>{file.name}</div>
-                  <button class="remove-btn" onclick={() => removeFile(index)}>
+                  <button class="remove-btn" aria-label="Remove file" onclick={() => removeFile(index)}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                   </button>
                 </div>
@@ -291,7 +278,6 @@
           class="main-input"
           placeholder={t("chat.placeholder")}
           bind:value={appState.query}
-          disabled={appState.isThinking}
           rows="1"
           style="resize: none; overflow: hidden; max-height: 200px;"
           onkeydown={(e) => {
@@ -300,7 +286,12 @@
               appState.config.useMultiAgentWorkflow = !appState.config.useMultiAgentWorkflow;
               return;
             }
-            if (e.key === "Enter" && !e.shiftKey && !appState.isThinking) {
+            if (e.key.toLowerCase() === "t" && e.ctrlKey) {
+              e.preventDefault();
+              appState.config.useThinkMode = !appState.config.useThinkMode;
+              return;
+            }
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submitQuery();
             }
@@ -331,12 +322,21 @@
     </div>
 
     <div class="status-bar" style="display:flex; justify-content:space-between; margin-top:8px; font-size:0.8rem; color:#6b7280; font-weight:600;">
-      <div>
-        <span>Mode: <span style="color:#1a1a1a;">{appState.config.useMultiAgentWorkflow ? "Multi-Agent (Accuracy)" : "Single (Fast)"}</span></span>
-        <span style="margin-left:8px; opacity:0.7;">(Shift+Tab to switch)</span>
-        <span style="margin-left:12px;">Max Loops: {appState.config.maxLoops}</span>
+      <div style="display:flex; gap:16px;">
+        <div>
+          <span>{t("chat.mode")}: <span style="color:#1a1a1a;">{appState.config.useMultiAgentWorkflow ? t("chat.multi_accuracy") : t("chat.single_fast")}</span></span>
+          <span style="margin-left:6px; opacity:0.7;">(Shift+Tab)</span>
+        </div>
+        <div>
+          <span>{t("chat.think")}: <span style="color:#1a1a1a;">{appState.config.useThinkMode ? t("chat.on") : t("chat.off")}</span></span>
+          <span style="margin-left:6px; opacity:0.7;">(Ctrl+T)</span>
+        </div>
+        <div>Max Loops: {appState.config.maxLoops}</div>
       </div>
       <div>
+        {#if appState.config.heartbeatEnabled}
+          <span style="color:#2563eb; margin-right: 12px; font-weight:500;" title="Heartbeat Remaining">HB: {appState.heartbeatRemainingSec}s</span>
+        {/if}
         {#if appState.isThinking}
           <span style="color:#e0005a; animation:pulse 1s infinite alternate;">Elapsed: {appState.elapsedSec}s</span>
         {/if}
@@ -409,63 +409,7 @@
     scroll-behavior: smooth;
   }
 
-  .message {
-    display: flex;
-    gap: 24px;
-    align-items: flex-start;
-    max-width: 85%;
-    animation: fadeIn 0.3s ease-out;
-  }
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
 
-  .message.user {
-    align-self: flex-end;
-    flex-direction: row-reverse;
-  }
-
-  .avatar {
-    font-size: 1.1rem;
-    background: #fcfbf8;
-    border: 1px solid #1a1a1a;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0;
-    flex-shrink: 0;
-    color: #1a1a1a;
-  }
-
-  .bubble {
-    background: transparent;
-    padding: 0;
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: #1a1a1a;
-  }
-  .message.user .bubble {
-    background: #ebe8de;
-    border: 1px solid #1a1a1a;
-    color: #1a1a1a;
-    border-radius: 0;
-    padding: 8px 16px;
-    line-height: 1.4;
-  }
-  .message.assistant .bubble {
-    width: 100%;
-  }
-  
-  /* Remove default paragraph margins inside all bubbles to prevent unwanted vertical stretching */
-  .bubble :global(p) { margin: 0; }
-  .bubble :global(p:not(:last-child)) { margin-bottom: 12px; }
 
   .badges-row {
     display: flex;

@@ -9,13 +9,31 @@
   import { appState, addLog, triggerHeartbeat } from "./lib/store.svelte";
   import { initLocales, t } from "./lib/i18n.svelte";
 
+  $effect(() => {
+    if (appState.pendingHeartbeat && !appState.isThinking && appState.query.trim().length === 0 && appState.pendingUserQueries.length === 0) {
+      appState.pendingHeartbeat = false;
+      setTimeout(() => {
+        if (!appState.isThinking && appState.query.trim().length === 0) {
+          triggerHeartbeat();
+        }
+      }, 300);
+    }
+  });
+
   onMount(async () => {
     listen<string>("tool_log", (event) => {
       addLog(event.payload);
     });
 
+    listen<number>("heartbeat_progress", (event) => {
+      appState.heartbeatRemainingSec = event.payload;
+    });
+
     listen("heartbeat_tick", () => {
-      if (appState.isThinking) return;
+      if (appState.isThinking || appState.query.trim().length > 0 || appState.pendingUserQueries.length > 0) {
+        appState.pendingHeartbeat = true;
+        return;
+      }
       triggerHeartbeat();
     });
 
@@ -29,6 +47,13 @@
       appState.config.apiUrl = loadedConfig.api_url;
       appState.config.model = loadedConfig.model || "gemma-4";
       appState.config.llmApiKey = loadedConfig.llm_api_key || "";
+      appState.config.cloudApiUrl = loadedConfig.cloud_api_url || "";
+      appState.config.cloudModel = loadedConfig.cloud_model || "anthropic/claude-3-opus-20240229";
+      appState.config.cloudLlmApiKey = loadedConfig.cloud_llm_api_key || "";
+      appState.config.cloudRoutingPlanner = loadedConfig.cloud_routing_planner ?? false;
+      appState.config.cloudRoutingCritic = loadedConfig.cloud_routing_critic ?? true;
+      appState.config.cloudRoutingWriter = loadedConfig.cloud_routing_writer ?? true;
+      appState.config.cloudRoutingWorker = loadedConfig.cloud_routing_worker ?? false;
       appState.config.maxLoops = loadedConfig.max_loops || 3;
       appState.config.systemPrompt = loadedConfig.system_prompt || appState.config.systemPrompt;
       appState.config.searchProvider = loadedConfig.search_provider || "duckduckgo";
@@ -36,11 +61,14 @@
       appState.config.googleApiKey = loadedConfig.google_api_key || "";
       appState.config.googleCx = loadedConfig.google_cx || "";
       appState.config.useMultiAgentWorkflow = loadedConfig.use_multi_agent_workflow || false;
+      appState.config.useThinkMode = loadedConfig.use_think_mode ?? true;
       appState.config.plannerPrompt = loadedConfig.planner_prompt || appState.config.plannerPrompt;
       appState.config.criticPrompt = loadedConfig.critic_prompt || appState.config.criticPrompt;
       appState.config.writerPrompt = loadedConfig.writer_prompt || appState.config.writerPrompt;
       appState.config.reflectorPrompt = loadedConfig.reflector_prompt || appState.config.reflectorPrompt;
       appState.config.heartbeatPrompt = loadedConfig.heartbeat_prompt || appState.config.heartbeatPrompt;
+      appState.config.workerPrompt = loadedConfig.worker_prompt || appState.config.workerPrompt;
+      appState.config.registryPrompt = loadedConfig.registry_prompt || appState.config.registryPrompt;
       appState.config.heartbeatEnabled = loadedConfig.heartbeat_enabled || false;
       appState.config.heartbeatInterval = loadedConfig.heartbeat_interval || 3600;
       appState.config.telegramEnabled = loadedConfig.telegram_enabled || false;

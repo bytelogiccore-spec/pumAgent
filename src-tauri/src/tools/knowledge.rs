@@ -59,7 +59,20 @@ impl KnowledgeTool {
     }
 
     pub fn write(&self, domain: &str, name: &str, content: &str) -> Result<String, String> {
-        let key = self.resolve_key(domain, name)?;
+        let mut final_name = name.to_string();
+        if domain == "schedules" {
+            if !final_name.ends_with(".json") {
+                final_name = format!(
+                    "{}.json",
+                    final_name.trim_end_matches(".md").trim_end_matches(".txt")
+                );
+            }
+            if let Err(e) = serde_json::from_str::<crate::agent::scheduler::ScheduleConfig>(content)
+            {
+                return Err(format!("CRITICAL ERROR: Schedule content MUST be valid JSON matching the ScheduleConfig schema! Parse error: {}\n\nYou provided plain text or invalid JSON. Please correct it and output ONLY the JSON object.", e));
+            }
+        }
+        let key = self.resolve_key(domain, &final_name)?;
         match self
             .db
             .insert("knowledge_base", key.as_bytes(), content.as_bytes())

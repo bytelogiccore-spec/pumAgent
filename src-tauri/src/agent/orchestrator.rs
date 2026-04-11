@@ -10,8 +10,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+#[derive(Clone, Default)]
+pub struct CloudRoutingFlags {
+    pub planner: bool,
+    pub critic: bool,
+    pub writer: bool,
+    pub worker: bool,
+}
+
 pub struct Orchestrator {
-    llm: LLMClient,
+    local_llm: LLMClient,
+    cloud_llm: LLMClient,
+    routing_flags: CloudRoutingFlags,
     multi_agent: Arc<MultiAgent>,
     base_dir: std::path::PathBuf,
     db: Arc<Database>,
@@ -19,21 +29,43 @@ pub struct Orchestrator {
 
 impl Orchestrator {
     pub fn new(
-        llm: LLMClient,
+        local_llm: LLMClient,
+        cloud_llm: LLMClient,
+        routing_flags: CloudRoutingFlags,
         multi_agent: Arc<MultiAgent>,
         base_dir: std::path::PathBuf,
         db: Arc<Database>,
     ) -> Self {
         Self {
-            llm,
+            local_llm,
+            cloud_llm,
+            routing_flags,
             multi_agent,
             base_dir,
             db,
         }
     }
 
+    fn get_llm_for_planner(&self) -> &LLMClient {
+        if self.routing_flags.planner { &self.cloud_llm } else { &self.local_llm }
+    }
+
+    fn get_llm_for_critic(&self) -> &LLMClient {
+        if self.routing_flags.critic { &self.cloud_llm } else { &self.local_llm }
+    }
+
+    fn get_llm_for_writer(&self) -> &LLMClient {
+        if self.routing_flags.writer { &self.cloud_llm } else { &self.local_llm }
+    }
+
+    fn get_llm_for_worker(&self) -> &LLMClient {
+        if self.routing_flags.worker { &self.cloud_llm } else { &self.local_llm }
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub async fn run_loop(
         &self,
+        session_id: Option<String>,
         system_prompt: &str,
         planner_prompt_opt: Option<&str>,
         critic_prompt_opt: Option<&str>,
@@ -42,12 +74,14 @@ impl Orchestrator {
         language: &str,
         max_loops: u32,
         use_multi_agent_workflow: bool,
+        registry_prompt_opt: Option<&str>,
         log_tx: mpsc::Sender<String>,
         cancel_flag: Arc<AtomicBool>,
     ) -> Result<(String, Vec<ChatMessage>), String> {
         if use_multi_agent_workflow {
             return self
                 .run_multi_agent_pipeline(
+                    session_id.clone(),
                     system_prompt,
                     planner_prompt_opt,
                     critic_prompt_opt,
@@ -55,6 +89,7 @@ impl Orchestrator {
                     user_messages,
                     language,
                     max_loops,
+                    registry_prompt_opt,
                     log_tx,
                     cancel_flag,
                 )
@@ -183,7 +218,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                 .send(format!("[Step {}/LLM] AI 응답 대기 중...", loop_count))
                 .await;
 
-            let response = match self.llm.chat(&history, 0.7).await {
+            let response = match self.get_llm_for_worker().chat(&history, 0.7).await {
                 Ok(res) => res,
                 Err(e) => {
                     let err_msg = format!("LLM 통신 에러: {}", e);
@@ -226,7 +261,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                 let _ = log_tx
                     .send("[완료] 최종 라운드가 성공적으로 종료되었습니다.".to_string())
                     .await;
-                self.save_transcript(&history);
+                self.save_transcript(session_id, &history);
                 return Ok((Self::sanitize_output(&ai_text), history));
             }
 
@@ -238,7 +273,14 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                 .await;
 
             // Execute Tools
-            let results = self.multi_agent.execute_tools(tool_calls).await;
+            let results = self
+                .multi_agent
+                .execute_tools(
+                    tool_calls,
+                    Some(self.local_llm.clone()),
+                    registry_prompt_opt.map(|s| s.to_string()),
+                )
+                .await;
 
             let mut result_summary_md = String::from("### Tool Execution Results\n");
             for r in results {
@@ -247,7 +289,10 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                     .send(format!(" -> [{}.{}] {}", r.tool_name, r.action, status))
                     .await;
 
-                if r.ok && (r.action == "write" || r.action == "write_artifact") && (r.tool_name == "brain" || r.tool_name == "knowledge") {
+                if r.ok
+                    && (r.action == "write" || r.action == "write_artifact")
+                    && (r.tool_name == "brain" || r.tool_name == "knowledge")
+                {
                     let _ = log_tx
                         .send(format!("[DB 저장 이벤트] 💾 {} 도구를 통해 데이터베이스에 저장이 완료되었습니다.", r.tool_name))
                         .await;
@@ -279,12 +324,12 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
         }) = history.last()
         {
             if r == "assistant" {
-                self.save_transcript(&history);
+                self.save_transcript(session_id, &history);
                 return Ok((Self::sanitize_output(c), history));
             }
         }
 
-        self.save_transcript(&history);
+        self.save_transcript(session_id, &history);
         Ok((
             "에이전트가 결론을 짓지 못하고 종료되었습니다.".to_string(),
             history,
@@ -292,21 +337,28 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
     }
 
     /// Saves the complete session transcript into the logs/ directory
-    fn save_transcript(&self, history: &[ChatMessage]) {
+    fn save_transcript(&self, session_id: Option<String>, history: &[ChatMessage]) {
         let logs_dir = self.base_dir.join("logs");
         if !logs_dir.exists() {
             let _ = fs::create_dir_all(&logs_dir);
         }
-        let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
-        let filepath = logs_dir.join(format!("session_{}.md", timestamp));
+        
+        let filename = match session_id {
+            Some(id) if !id.is_empty() => format!("{}_Session.md", id),
+            _ => format!("Background_{}.md", Local::now().format("%y%m%d_%H%M%S")),
+        };
+        
+        let filepath = logs_dir.join(&filename);
 
         let mut out = String::new();
-        out.push_str(&format!("# PumAgent Session Log - {}\n\n", timestamp));
+        out.push_str(&format!("# PumAgent Session Log - {}\n\n", Local::now().format("%Y-%m-%d %H:%M:%S")));
         for msg in history {
             out.push_str(&format!("### Role: {}\n", msg.role.to_uppercase()));
             out.push_str(&format!("{}\n\n---\n", msg.content));
         }
 
+        // We truncate(true) because `history` contains the FULL array of messages from Svelte.
+        // Overwriting guarantees the log exactly mirrors the active conversation without repeating past blocks.
         if let Ok(mut file) = OpenOptions::new()
             .create(true)
             .write(true)
@@ -318,7 +370,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
     }
 
     /// Strips internal Gemma chain-of-thought tags like `<channel|>` from final user output
-    fn sanitize_output(text: &str) -> String {
+    pub fn sanitize_output(text: &str) -> String {
         let mut clean = text.to_string();
         if let Some(pos) = clean.rfind("<channel|>") {
             clean = clean[pos + "<channel|>".len()..].trim().to_string();
@@ -333,8 +385,10 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
         clean
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn run_multi_agent_pipeline(
         &self,
+        session_id: Option<String>,
         system_prompt: &str,
         planner_prompt_opt: Option<&str>,
         critic_prompt_opt: Option<&str>,
@@ -342,6 +396,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
         user_messages: Vec<ChatMessage>,
         language: &str,
         max_loops: u32,
+        registry_prompt_opt: Option<&str>,
         log_tx: mpsc::Sender<String>,
         cancel_flag: Arc<AtomicBool>,
     ) -> Result<(String, Vec<ChatMessage>), String> {
@@ -474,7 +529,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 ))
                 .await;
 
-            let planner_res = match self.llm.chat(&history, 0.7).await {
+            let planner_res = match self.get_llm_for_planner().chat(&history, 0.7).await {
                 Ok(r) => r,
                 Err(e) => return Err(format!("Planner LLM 에러: {}", e)),
             };
@@ -497,7 +552,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                         content: text_res.to_string(),
                         images_base64: None,
                     });
-                    self.save_transcript(&history);
+                    self.save_transcript(session_id.clone(), &history);
                     return Ok((Self::sanitize_output(text_res), history));
                 }
 
@@ -529,7 +584,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                     .send("[Writer] 최종 답변 작성 중...".to_string())
                     .await;
                 let writer_res = self
-                    .llm
+                    .get_llm_for_writer()
                     .chat(&writer_history, 0.7)
                     .await
                     .unwrap_or_else(|_| LLMResult {
@@ -542,7 +597,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                     content: writer_res.content.clone(),
                     images_base64: None,
                 });
-                self.save_transcript(&history);
+                self.save_transcript(session_id.clone(), &history);
                 return Ok((Self::sanitize_output(&writer_res.content), history));
             }
 
@@ -559,7 +614,14 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                     json_blocks.len()
                 ))
                 .await;
-            let results = self.multi_agent.execute_tools(json_blocks).await;
+            let results = self
+                .multi_agent
+                .execute_tools(
+                    json_blocks,
+                    Some(self.local_llm.clone()),
+                    registry_prompt_opt.map(|s| s.to_string()),
+                )
+                .await;
 
             let mut result_summary_md = String::from("### Tool Execution Results\n");
             for r in results {
@@ -567,8 +629,11 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 let _ = log_tx
                     .send(format!(" -> [{}.{}] {}", r.tool_name, r.action, status))
                     .await;
-                
-                if r.ok && (r.action == "write" || r.action == "write_artifact") && (r.tool_name == "brain" || r.tool_name == "knowledge") {
+
+                if r.ok
+                    && (r.action == "write" || r.action == "write_artifact")
+                    && (r.tool_name == "brain" || r.tool_name == "knowledge")
+                {
                     let _ = log_tx
                         .send(format!("[DB 저장 이벤트] 💾 {} 도구를 통해 데이터베이스에 저장이 완료되었습니다.", r.tool_name))
                         .await;
@@ -597,7 +662,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 .replace("{RESULT_SUMMARY}", &result_summary_md);
 
             let critic_res = self
-                .llm
+                .get_llm_for_critic()
                 .chat(
                     &[ChatMessage {
                         role: "user".to_string(),
@@ -641,7 +706,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                     .send("[Writer] 최종 답변 정리 중...".to_string())
                     .await;
                 let writer_res = self
-                    .llm
+                    .get_llm_for_writer()
                     .chat(&writer_history, 0.7)
                     .await
                     .unwrap_or_else(|_| LLMResult {
@@ -654,7 +719,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                     content: writer_res.content.clone(),
                     images_base64: None,
                 });
-                self.save_transcript(&history);
+                self.save_transcript(session_id.clone(), &history);
                 return Ok((Self::sanitize_output(&writer_res.content), history));
             } else {
                 let fb = critic_res
@@ -671,7 +736,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
             }
         }
 
-        self.save_transcript(&history);
+        self.save_transcript(session_id.clone(), &history);
         Ok((
             "에이전트 파이프라인이 결론을 짓지 못하고 종료되었습니다.".to_string(),
             history,
@@ -703,7 +768,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
             content: "You have reviewed the conversation. If you need to store anything in the brain or schedule a task, output the appropriate JSON tool blocks now. If no memory or scheduling is needed, reply exactly 'NO_MEMORY_NEEDED'.".to_string(), images_base64: None });
 
         let reflector_res = self
-            .llm
+            .local_llm
             .chat(&history, 0.7)
             .await
             .unwrap_or_else(|_| LLMResult {
@@ -735,12 +800,21 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
             .await;
 
         // Execute the tools
-        let results = self.multi_agent.execute_tools(tool_calls).await;
-        
+        let results = self
+            .multi_agent
+            .execute_tools(tool_calls, Some(self.local_llm.clone()), None)
+            .await;
+
         for r in results {
-            if r.ok && (r.action == "write" || r.action == "write_artifact") && (r.tool_name == "brain" || r.tool_name == "knowledge") {
+            if r.ok
+                && (r.action == "write" || r.action == "write_artifact")
+                && (r.tool_name == "brain" || r.tool_name == "knowledge")
+            {
                 let _ = log_tx
-                    .send(format!("[DB 저장 백그라운드] 💾 {} 도구를 통해 데이터가 병합되었습니다.", r.tool_name))
+                    .send(format!(
+                        "[DB 저장 백그라운드] 💾 {} 도구를 통해 데이터가 병합되었습니다.",
+                        r.tool_name
+                    ))
                     .await;
             }
         }

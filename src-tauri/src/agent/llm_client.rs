@@ -25,6 +25,7 @@ pub struct LLMResult {
     pub raw: Value,
 }
 
+#[derive(Clone)]
 pub struct LLMClient {
     client: Client,
     base_url: String,
@@ -111,10 +112,16 @@ impl LLMClient {
 
         let raw_json: Value = response.json().await?;
 
-        let content = raw_json["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
+        let msg_obj = &raw_json["choices"][0]["message"];
+        let mut content = msg_obj["content"].as_str().unwrap_or_default().to_string();
+
+        if let Some(reasoning) = msg_obj.get("reasoning_content").and_then(|v| v.as_str()) {
+            if !reasoning.is_empty()
+                && !content.contains(&reasoning[..std::cmp::min(20, reasoning.len())])
+            {
+                content = format!("<think>\n{}\n</think>\n\n{}", reasoning, content);
+            }
+        }
 
         Ok(LLMResult {
             content,
