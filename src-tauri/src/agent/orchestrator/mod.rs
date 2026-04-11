@@ -120,36 +120,47 @@ impl Orchestrator {
             schedules_summary, status_summary
         );
 
-        let mut skills_rules = String::from("[AVAILABLE CUSTOM SKILLS & RULES]\nThe following modules are registered in your database. If a requested task matches these names, you MUST use the `knowledge` tool (action=\"read\") to read their exact instructions first:\n");
+        let mut rules_str = String::from("[GLOBAL BEHAVIOR RULES]\nThese rules apply to ALL your actions and final outputs. You MUST obey them:\n");
+        let mut modules_str = String::from("\n[AVAILABLE CUSTOM SKILLS & WORKFLOWS]\nThe following modules are registered in your database. If a requested task matches these names, you MUST use the `knowledge` tool (action=\"read\") to read their exact instructions before starting:\n");
+
         if let Ok(records) = self.db.scan("knowledge_base") {
-            let mut count = 0;
-            for (key, _) in records {
+            let mut rules_count = 0;
+            let mut modules_count = 0;
+
+            for (key, val) in records {
                 let k_str = String::from_utf8_lossy(&key);
-                if k_str.starts_with("skills:")
-                    || k_str.starts_with("rules:")
-                    || k_str.starts_with("workflows:")
-                {
-                    let parts: Vec<&str> = k_str.split(':').collect();
-                    if parts.len() == 2 {
-                        skills_rules
-                            .push_str(&format!("- Domain: {}, Name: {}\n", parts[0], parts[1]));
-                        count += 1;
+                let parts: Vec<&str> = k_str.split(':').collect();
+                if parts.len() == 2 {
+                    if k_str.starts_with("rules:") {
+                        let content = String::from_utf8_lossy(&val);
+                        rules_str.push_str(&format!("- RULE [{}]:\n{}\n\n", parts[1], content.trim()));
+                        rules_count += 1;
+                    } else if k_str.starts_with("skills:") || k_str.starts_with("workflows:") {
+                        modules_str.push_str(&format!("- Domain: {}, Name: {}\n", parts[0], parts[1]));
+                        modules_count += 1;
                     }
                 }
             }
-            if count == 0 {
-                skills_rules.push_str("- No custom skills or rules learned yet.\n");
+
+            if rules_count == 0 {
+                rules_str.push_str("- No global rules defined.\n");
+            }
+            if modules_count == 0 {
+                modules_str.push_str("- No custom skills or workflows learned yet.\n");
             }
         } else {
-            skills_rules.push_str("- No custom skills or rules learned yet.\n");
+            rules_str.push_str("- No global rules defined.\n");
+            modules_str.push_str("- No custom skills or workflows learned yet.\n");
         }
+
+        let combined_rules_modules = format!("{}{}", rules_str, modules_str);
 
         (
             current_time,
             brain_files_md,
             schedule_files_md,
             pending_tasks,
-            skills_rules,
+            combined_rules_modules,
         )
     }
 
