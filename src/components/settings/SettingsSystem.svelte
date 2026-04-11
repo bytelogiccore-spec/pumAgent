@@ -72,13 +72,34 @@
       <input type="text" bind:value={customLangInput} placeholder={t("settings.lang_ph")} style="flex:1;" />
       <button class="sys-badge" onclick={generateCustomLang} disabled={isTranslating} style="background: #1a1a1a; color: white; display: flex; align-items: center; justify-content: center; gap: 8px;">
         {#if isTranslating}
-          <svg class="brain-loader" viewBox="0 0 120 100" width="20" height="20" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-            <path class="brain-line" d="M 60 15 C 40 5, 10 20, 15 45 C 5 60, 20 80, 40 85 C 50 100, 70 100, 80 85 C 100 80, 115 60, 105 45 C 110 20, 80 5, 60 15 Z" />
-            <path class="brain-line" d="M 60 15 L 60 85" />
-            <path class="brain-line" d="M 30 35 C 45 35, 50 45, 60 40" />
-            <path class="brain-line" d="M 90 35 C 75 35, 70 45, 60 40" />
-            <path class="brain-line" d="M 25 60 C 40 55, 45 65, 60 60" />
-            <path class="brain-line" d="M 95 60 C 80 55, 75 65, 60 60" />
+          <svg class="brain-loader" viewBox="0 0 100 100" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Hexagon -->
+            <path class="brain-line" d="M 50 5 L 85 25 L 85 69 L 50 89 L 15 69 L 15 25 Z" />
+            <circle class="brain-line" cx="50" cy="5" r="3" />
+            <circle class="brain-line" cx="85" cy="25" r="3" />
+            <circle class="brain-line" cx="85" cy="69" r="3" />
+            <circle class="brain-line" cx="50" cy="89" r="3" />
+            <circle class="brain-line" cx="15" cy="69" r="3" />
+            <circle class="brain-line" cx="15" cy="25" r="3" />
+            <!-- Connectors -->
+            <path class="brain-line" d="M 50 8 L 50 22" />
+            <path class="brain-line" d="M 50 86 L 50 72" />
+            <path class="brain-line" d="M 82 27 L 67 34" />
+            <path class="brain-line" d="M 82 67 L 66 65" />
+            <path class="brain-line" d="M 18 27 L 33 34" />
+            <path class="brain-line" d="M 18 67 L 34 65" />
+            <!-- Fissure -->
+            <path class="brain-line" d="M 50 22 L 50 72" />
+            <!-- Right Hemisphere -->
+            <path class="brain-line" d="M 50 22 C 58 18, 68 25, 67 34 C 76 34, 78 45, 69 49 C 76 53, 76 65, 66 65 C 67 72, 58 75, 50 72" />
+            <path class="brain-line" d="M 54 32 C 60 33, 64 38, 62 43" />
+            <path class="brain-line" d="M 54 45 C 61 42, 66 50, 64 60" />
+            <path class="brain-line" d="M 52 57 C 57 56, 60 60, 58 68" />
+            <!-- Left Hemisphere -->
+            <path class="brain-line" d="M 50 22 C 42 18, 32 25, 33 34 C 24 34, 22 45, 31 49 C 24 53, 24 65, 34 65 C 33 72, 42 75, 50 72" />
+            <path class="brain-line" d="M 46 32 C 40 33, 36 38, 38 43" />
+            <path class="brain-line" d="M 46 45 C 39 42, 34 50, 36 60" />
+            <path class="brain-line" d="M 48 57 C 43 56, 40 60, 42 68" />
           </svg>
           {t("settings.translating")}
         {:else}
@@ -224,18 +245,19 @@
   }
   .brain-loader {
     animation: pulseBrain 1.5s infinite ease-in-out;
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.5));
   }
   .brain-line {
-    stroke-dasharray: 300;
-    stroke-dashoffset: 300;
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
     animation: drawBrain 1.5s linear infinite alternate;
   }
   @keyframes drawBrain {
-    0% { stroke-dashoffset: 300; }
+    0% { stroke-dashoffset: 200; }
     100% { stroke-dashoffset: 0; }
   }
   @keyframes pulseBrain {
     0%, 100% { transform: scale(1); opacity: 0.85; }
-    50% { transform: scale(1.1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 1; }
   }
 </style>
