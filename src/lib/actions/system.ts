@@ -235,6 +235,7 @@ export async function loadSettings() {
       if (configData.heartbeat_prompt) appState.config.heartbeatPrompt = configData.heartbeat_prompt;
       if (configData.worker_prompt) appState.config.workerPrompt = configData.worker_prompt;
       if (configData.registry_prompt) appState.config.registryPrompt = configData.registry_prompt;
+      if (configData.custom_languages) appState.config.customLanguages = configData.custom_languages;
       
       if (configData.heartbeat_enabled !== undefined) appState.config.heartbeatEnabled = configData.heartbeat_enabled;
       if (configData.heartbeat_interval) appState.config.heartbeatInterval = configData.heartbeat_interval;
@@ -281,6 +282,7 @@ export async function saveSettings(closeModal: boolean = true) {
         heartbeat_prompt: appState.config.heartbeatPrompt,
         worker_prompt: appState.config.workerPrompt,
         registry_prompt: appState.config.registryPrompt,
+        custom_languages: appState.config.customLanguages || [],
         heartbeat_enabled: appState.config.heartbeatEnabled,
         heartbeat_interval: appState.config.heartbeatInterval,
         telegram_enabled: appState.config.telegramEnabled,

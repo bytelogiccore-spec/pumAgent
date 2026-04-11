@@ -19,7 +19,7 @@
   }
 
   async function generateCustomLang() {
-    if (!appState.config.endpoints || appState.config.endpoints.length === 0 || !appState.config.endpoints[0].api_key) {
+    if (!appState.config.endpoints || appState.config.endpoints.length === 0) {
       showError(t("settings.api_not_set"));
       return;
     }
@@ -61,7 +61,7 @@
       <option value="ko">{t("settings.lang_ko")}</option>
       {#if appState.config.customLanguages}
         {#each appState.config.customLanguages as lang}
-          <option value={lang}>{lang.charAt(0).toUpperCase() + lang.slice(1)}{t("settings.lang_ai")}</option>
+          <option value={lang}>{lang}</option>
         {/each}
       {/if}
       <option value="custom">{t("settings.lang_custom")}</option>
