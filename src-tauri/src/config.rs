@@ -98,6 +98,9 @@ pub struct AppConfig {
     pub heartbeat_prompt: Option<String>,
     #[serde(default)]
     pub worker_prompt: Option<String>,
+
+    #[serde(default)]
+    pub custom_languages: Vec<String>,
     #[serde(default)]
     pub registry_prompt: Option<String>,
 

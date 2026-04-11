@@ -45,6 +45,7 @@ export const appState = $state({
     registryEndpointId: "local-primary",
     maxLoops: 3,
     language: "en",
+    customLanguages: [] as string[],
     systemPrompt: "You are a practical AI development assistant. Always respond in Korean.",
     searchProvider: "duckduckgo",
     tavilyApiKey: "",

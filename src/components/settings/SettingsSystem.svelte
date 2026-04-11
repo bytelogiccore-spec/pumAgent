@@ -19,18 +19,33 @@
   }
 
   async function generateCustomLang() {
-    if (!customLangInput.trim()) return;
+    if (!appState.config.endpoints || appState.config.endpoints.length === 0 || !appState.config.endpoints[0].api_key) {
+      showError("AI API 설정이 아직 완료되지 않았습니다. System 탭에서 LLM Endpoints API Key를 먼저 설정해주세요.");
+      return;
+    }
+
+    let target = customLangInput.trim().toLowerCase();
+    if (!target) return;
+
     isTranslating = true;
     try {
-      await invoke("translate_i18n", { targetLang: customLangInput.trim().toLowerCase() });
-      appState.config.language = customLangInput.trim().toLowerCase();
+      await invoke("translate_i18n", { targetLang: target });
+
+      if (!appState.config.customLanguages) {
+        appState.config.customLanguages = [];
+      }
+      if (!appState.config.customLanguages.includes(target)) {
+        appState.config.customLanguages.push(target);
+      }
+
+      appState.config.language = target;
       await initLocales();
       await saveSettings(false); // Do not close the modal
       isCustomLanguage = false; // Collapse custom form on success
       customLangInput = "";
     } catch (e) {
       console.error(e);
-      showError("Translation failed: " + e);
+      showError("번역 생성 실패: " + e);
     } finally {
       isTranslating = false;
     }
@@ -44,11 +59,11 @@
     <select value={isCustomLanguage ? 'custom' : appState.config.language} onchange={onLanguageSelect} class="sys-select" style="width: 200px;">
       <option value="en">English (Default)</option>
       <option value="ko">한국어 (Korean)</option>
-      <option value="es">Español (スペイン語)</option>
-      <option value="fr">Français (French)</option>
-      <option value="de">Deutsch (German)</option>
-      <option value="zh">中文 (Chinese)</option>
-      <option value="ja">日本語 (Japanese)</option>
+      {#if appState.config.customLanguages}
+        {#each appState.config.customLanguages as lang}
+          <option value={lang}>{lang.charAt(0).toUpperCase() + lang.slice(1)} (AI)</option>
+        {/each}
+      {/if}
       <option value="custom">✨ Generate via AI...</option>
     </select>
   </label>

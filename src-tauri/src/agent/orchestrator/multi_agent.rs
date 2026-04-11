@@ -26,10 +26,9 @@ impl super::Orchestrator {
             self.build_context();
 
         let (lang_name, _lang_native) = match language {
-            "en" => ("ENGLISH", "English"),
-            "ja" => ("JAPANESE", "日本語"),
-            "zh" => ("CHINESE", "中文"),
-            _ => ("KOREAN", "한국어"),
+            "en" => ("ENGLISH".to_string(), "English".to_string()),
+            "ko" => ("KOREAN".to_string(), "한국어".to_string()),
+            _ => (language.to_uppercase(), language.to_string()),
         };
 
 let fallback_planner_prompt = format!(r#"[PLANNER SYSTEM PROMPT]

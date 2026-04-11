@@ -42,10 +42,9 @@ impl super::Orchestrator {
         }
 
         let (lang_name, lang_native) = match language {
-            "en" => ("ENGLISH", "English"),
-            "ja" => ("JAPANESE", "日本語"),
-            "zh" => ("CHINESE", "中文"),
-            _ => ("KOREAN", "한국어"),
+            "en" => ("ENGLISH".to_string(), "English".to_string()),
+            "ko" => ("KOREAN".to_string(), "한국어".to_string()),
+            _ => (language.to_uppercase(), language.to_string()),
         };
 
         let (current_time, brain_files_md, schedule_files_md, mut pending_tasks, skills_rules) =
