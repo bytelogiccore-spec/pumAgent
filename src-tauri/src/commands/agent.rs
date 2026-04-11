@@ -338,7 +338,13 @@ pub async fn translate_i18n(
         _ => return Err("en.json base locale not found".to_string()),
     };
 
-    let system_prompt = "You are a professional JSON translator. Translate the given localization JSON map values into the requested language. RULES:\n1. Keep all JSON keys exactly the same.\n2. Translate ONLY the values into the target language.\n3. Return strictly valid JSON with no markdown formatting, no codeblocks and no explanation.\n4. For the key `settings.lang_custom_display`, specify the target language's English name followed by its native name in parentheses, for example: `Korean(한국어)` or `Chinese(中文)`. Do NOT use the user's raw input directly.".to_string();
+    let system_prompt = "You are a professional JSON translator. Translate the given localization JSON map values into the requested target language.
+RULES:
+1. Keep all JSON keys exactly the same.
+2. Translate ONLY the values into the target language.
+3. Return strictly valid JSON with no markdown formatting, no codeblocks and no explanation.
+4. CRITICAL: For the exact key `settings.lang_custom_display`, you MUST change its value to the target language's English name followed by its native name in parentheses.
+   Example: If target is '중국어', change it to 'Chinese(中文)'. If target is 'italiano', change it to 'Italian(Italiano)'. DO NOT output 'English(English)' unless the target is actually English.".to_string();
 
     let messages = vec![
         crate::agent::llm_client::ChatMessage {
