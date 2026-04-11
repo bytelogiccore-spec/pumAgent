@@ -28,6 +28,7 @@
     "dompurify": "^3.3.3",
     "katex": "^0.16.45",
     "marked": "^18.0.0",
-    "marked-katex-extension": "^5.1.8"
+    "marked-katex-extension": "^5.1.8",
+    "mermaid": "^11.14.0"
   }
 }

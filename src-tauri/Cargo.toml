@@ -40,3 +40,5 @@ teloxide = { version = "0.13.0", features = ["macros"] }
 cron = "0.16.0"
 dbx-core = "0.2.1-beta"
 regex = "1.12.3"
+base64 = "0.22.1"
+flate2 = "1.1.9"

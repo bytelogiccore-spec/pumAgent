@@ -31,10 +31,51 @@ impl TelegramTool {
         let bot = Bot::new(config.telegram_bot_token.clone());
         let chat_id = ChatId(config.telegram_chat_id.parse::<i64>().unwrap_or_default());
 
-        match bot.send_message(chat_id, message).await {
-            Ok(_) => "Telegram message sent successfully.".to_string(),
-            Err(e) => format!("Failed to send Telegram message: {}", e),
+        let re = regex::Regex::new(r"```mermaid(?:\r?\n)([\s\S]*?)```").unwrap();
+        let mut diagrams = Vec::new();
+        for cap in re.captures_iter(message) {
+            if let Some(code) = cap.get(1) {
+                diagrams.push(code.as_str().to_string());
+            }
         }
+        let clean_text = re.replace_all(message, "🎨 [Mermaid Diagram Attached]").to_string();
+
+        let mut final_status = "Telegram message sent successfully.".to_string();
+
+        match bot.send_message(chat_id, &clean_text).await {
+            Ok(_) => {}
+            Err(e) => {
+                final_status = format!("Failed to send Telegram message: {}", e);
+            }
+        }
+
+        if !diagrams.is_empty() {
+            use base64::{engine::general_purpose, Engine as _};
+            use flate2::write::ZlibEncoder;
+            use flate2::Compression;
+            use std::io::Write;
+            use teloxide::types::InputFile;
+
+            let client = rquest::Client::new();
+            for diagram in diagrams {
+                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+                if encoder.write_all(diagram.as_bytes()).is_ok() {
+                    if let Ok(compressed) = encoder.finish() {
+                        let encoded = general_purpose::URL_SAFE.encode(&compressed);
+                        let kroki_url = format!("https://kroki.io/mermaid/png/{}", encoded);
+                        
+                        // We download the bytes manually into memory to avoid Url type incompatibilities 
+                        if let Ok(resp) = client.get(&kroki_url).send().await {
+                            if let Ok(bytes) = resp.bytes().await {
+                                let _ = bot.send_photo(chat_id, InputFile::memory(bytes.to_vec()).file_name("diagram.png".to_string())).await;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        final_status
     }
 
     pub async fn execute_action(

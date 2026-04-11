@@ -3,6 +3,8 @@
   import markedKatex from "marked-katex-extension";
   import DOMPurify from "dompurify";
   import { t } from "../lib/i18n.svelte";
+  import mermaid from "mermaid";
+  import { onMount, afterUpdate } from "svelte";
   
   marked.use(markedKatex({ throwOnError: false }));
   
@@ -13,10 +15,48 @@
     }
   });
 
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'base',
+    themeVariables: { primaryColor: '#fcfbf8', primaryTextColor: '#1a1a1a', lineColor: '#1a1a1a', primaryBorderColor: '#1a1a1a' }
+  });
+
   export let msg: { role: string; content: string; logs?: string[] };
   export let isThinking: boolean = false;
   export let isLast: boolean = false;
   export let onViewLogs: (logs: string[]) => void = () => {};
+
+  let messageElement: HTMLElement;
+
+  async function processMermaid() {
+    if (!messageElement || !msg || msg.role !== "assistant") return;
+    try {
+      const codes = messageElement.querySelectorAll('code.language-mermaid');
+      for (let i = 0; i < codes.length; i++) {
+        const code = codes[i];
+        if (!code.parentElement || code.parentElement.tagName !== 'PRE') continue;
+        const pre = code.parentElement;
+        const text = code.textContent || '';
+        if (!text.trim()) continue;
+        
+        const container = document.createElement('div');
+        container.className = 'mermaid';
+        container.textContent = text;
+        pre.parentNode?.replaceChild(container, pre);
+      }
+      
+      const mermaids = messageElement.querySelectorAll('.mermaid');
+      if (mermaids.length > 0) {
+        await mermaid.run({ nodes: mermaids, suppressErrors: true });
+      }
+    } catch (e) {
+      // ignore partial rendering errors during streaming
+    }
+  }
+
+  onMount(() => { processMermaid(); });
+  afterUpdate(() => { processMermaid(); });
 
   function viewLogs() {
     if (msg.logs) {
@@ -49,7 +89,7 @@
         {msg.logs && msg.logs.length > 0 ? msg.logs[msg.logs.length - 1] : "Thinking..."}
       </span>
     {:else}
-      <div>
+      <div bind:this={messageElement}>
         {@html formatContent(msg.content)}
       </div>
       {#if msg.logs && msg.logs.length > 0}

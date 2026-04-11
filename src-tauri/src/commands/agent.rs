@@ -82,6 +82,9 @@ pub async fn execute_agent_tools(
         "\n\n[GLOBAL RULE]\nCRITICAL: Any content intended for the user (such as final output or Telegram notifications) MUST be composed in {}.",
         payload.language
     ));
+    // Inject Visualization capability
+    actual_system_prompt.push_str("\n\n[VISUALIZATION DIRECTIVE]\nWhen explaining complex logic, relationships, architecture, or flows, you MUST use mermaid.js diagrams by wrapping them in ```mermaid blocks. Use Flowcharts, Sequence Diagrams, or State Diagrams where appropriate to drastically enhance readability.");
+
     if !payload.use_think_mode {
         actual_system_prompt.push_str("\n\n!! CRITICAL DIRECTIVE !!\nDO NOT OUTPUT ANY REASONING, THINKING, OR THOUGHT BLOCKS. DO NOT USE <think> OR SIMILAR TAGS. PROVIDE YOUR FINAL RESPONSE DIRECTLY AND IMMEDIATELY.");
     }
