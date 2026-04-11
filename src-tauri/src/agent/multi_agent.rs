@@ -67,7 +67,7 @@ impl MultiAgent {
                 .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
                 .to_string();
 
-            // AI Hallucination Fallback: AI sometimes concatenates tool name and action into `tool`
+            // AI Hallucination Fallback
             if let Some(idx) = tool.find(':').or_else(|| tool.find('.')) {
                 if action == "unknown" {
                     action = tool[idx + 1..]
@@ -90,243 +90,15 @@ impl MultiAgent {
 
             let llm_clone = llm.clone();
             let registry_prompt_clone = registry_prompt.clone();
+            
             let handle = task::spawn(async move {
                 match tool.as_str() {
-                    "crawl4ai" => {
-                        if action == "scrape" {
-                            let url = args.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                            match crawler.scrape(url).await {
-                                Ok(content) => ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: true,
-                                    output: content,
-                                },
-                                Err(e) => ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: false,
-                                    output: format!("Scrape error: {}", e),
-                                },
-                            }
-                        } else {
-                            ToolResult {
-                                tool_name: tool,
-                                action,
-                                ok: false,
-                                output: "Unsupported action".into(),
-                            }
-                        }
-                    }
-                    "search" => {
-                        if action == "query" {
-                            let query = args.get("query").and_then(|q| q.as_str()).unwrap_or("");
-                            let time_range = args.get("time_range").and_then(|t| t.as_str());
-                            match search_tool.search(query, time_range, 5).await {
-                                Ok(items) => {
-                                    let content = items
-                                        .into_iter()
-                                        .map(|item| {
-                                            format!(
-                                                "Title: {}\nLink: {}\nSnippet: {}\n---",
-                                                item.title, item.link, item.snippet
-                                            )
-                                        })
-                                        .collect::<Vec<String>>()
-                                        .join("\n");
-
-                                    ToolResult {
-                                        tool_name: tool,
-                                        action,
-                                        ok: true,
-                                        output: content,
-                                    }
-                                }
-                                Err(e) => ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: false,
-                                    output: format!("Search error: {}", e),
-                                },
-                            }
-                        } else {
-                            ToolResult {
-                                tool_name: tool,
-                                action,
-                                ok: false,
-                                output: "Unsupported action".into(),
-                            }
-                        }
-                    }
-                    "brain" => {
-                        let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
-
-                        match action.as_str() {
-                            "list" => {
-                                let result = brain_tool.list_artifacts();
-                                ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: result.is_ok(),
-                                    output: result.unwrap_or_else(|e| e),
-                                }
-                            }
-                            "read" => {
-                                let result = brain_tool.read_artifact(name);
-                                ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: result.is_ok(),
-                                    output: result.unwrap_or_else(|e| e),
-                                }
-                            }
-                            "write_artifact" => {
-                                let content =
-                                    args.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                                let result = brain_tool.write_artifact(name, content);
-                                ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: result.is_ok(),
-                                    output: result.unwrap_or_else(|e| e),
-                                }
-                            }
-                            _ => ToolResult {
-                                tool_name: tool,
-                                action,
-                                ok: false,
-                                output: "Unsupported action for brain tool".into(),
-                            },
-                        }
-                    }
-                    "knowledge" => {
-                        let domain = args.get("domain").and_then(|d| d.as_str()).unwrap_or("");
-                        let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
-
-                        match action.as_str() {
-                            "list" => {
-                                let result = knowledge_tool.list(domain);
-                                ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: result.is_ok(),
-                                    output: result.unwrap_or_else(|e| e),
-                                }
-                            }
-                            "read" => {
-                                let result = knowledge_tool.read(domain, name);
-                                ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: result.is_ok(),
-                                    output: result.unwrap_or_else(|e| e),
-                                }
-                            }
-                            "write" => {
-                                let mut content = args
-                                    .get("content")
-                                    .and_then(|c| c.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-
-                                // Intercept for JSON schemas using Registry Agent
-                                if (domain == "schedules" || domain == "skills" || domain == "rules")
-                                    && serde_json::from_str::<Value>(&content).is_err() {
-                                        if let (Some(client), Some(prompt)) =
-                                            (&llm_clone, &registry_prompt_clone)
-                                        {
-                                            let now_str = chrono::Local::now()
-                                                .format("%Y-%m-%d %A %H:%M:%S")
-                                                .to_string();
-                                            let prompt_with_context = format!("{}\n\n[SYSTEM TIME ANCHOR]\nCurrent System Time: {}\n\nUser Request to convert to JSON:\n{}", prompt, now_str, content);
-                                            let msgs =
-                                                vec![crate::agent::llm_client::ChatMessage {
-                                                    role: "user".to_string(),
-                                                    content: prompt_with_context,
-                                                    images_base64: None,
-                                                }];
-                                            if let Ok(res) = client.chat(&msgs, 0.1).await {
-                                                let ai_text = crate::agent::orchestrator::Orchestrator::sanitize_output(&res.content);
-                                                let json_blocks =
-                                                    crate::agent::parser::extract_json_blocks(
-                                                        &ai_text,
-                                                    );
-                                                if let Some(first_block) = json_blocks.first() {
-                                                    content =
-                                                        serde_json::to_string_pretty(first_block)
-                                                            .unwrap_or(content);
-                                                } else {
-                                                    content = ai_text;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                let result = knowledge_tool.write(domain, name, &content);
-                                ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: result.is_ok(),
-                                    output: result.unwrap_or_else(|e| e),
-                                }
-                            }
-                            "delete" => {
-                                let result = knowledge_tool.delete(domain, name);
-                                ToolResult {
-                                    tool_name: tool,
-                                    action,
-                                    ok: result.is_ok(),
-                                    output: result.unwrap_or_else(|e| e),
-                                }
-                            }
-                            _ => ToolResult {
-                                tool_name: tool,
-                                action,
-                                ok: false,
-                                output: "Unsupported action for knowledge".into(),
-                            },
-                        }
-                    }
-                    "terminal" => {
-                        if action == "execute" {
-                            let cmd_string =
-                                args.get("command").and_then(|c| c.as_str()).unwrap_or("");
-                            let result = terminal_tool.execute(cmd_string);
-                            ToolResult {
-                                tool_name: tool,
-                                action,
-                                ok: result.is_ok(),
-                                output: result.unwrap_or_else(|e| e),
-                            }
-                        } else {
-                            ToolResult {
-                                tool_name: tool,
-                                action,
-                                ok: false,
-                                output: "Unsupported action for terminal".into(),
-                            }
-                        }
-                    }
-                    "telegram" => {
-                        if action == "send_message" {
-                            let message =
-                                args.get("message").and_then(|m| m.as_str()).unwrap_or("");
-                            let result = telegram_tool.send_message(message).await;
-                            ToolResult {
-                                tool_name: tool,
-                                action,
-                                ok: result.contains("successfully"),
-                                output: result,
-                            }
-                        } else {
-                            ToolResult {
-                                tool_name: tool,
-                                action: action.clone(),
-                                ok: false,
-                                output: format!("Unknown telegram action: {}", action),
-                            }
-                        }
-                    }
+                    "crawl4ai" => crawler.execute_action(tool, action, args).await,
+                    "search" => search_tool.execute_action(tool, action, args).await,
+                    "brain" => brain_tool.execute_action(tool, action, args),
+                    "knowledge" => knowledge_tool.execute_action(tool, action, args, llm_clone, registry_prompt_clone).await,
+                    "terminal" => terminal_tool.execute_action(tool, action, args),
+                    "telegram" => telegram_tool.execute_action(tool, action, args).await,
                     _ => ToolResult {
                         tool_name: tool,
                         action,
@@ -347,7 +119,6 @@ impl MultiAgent {
         results
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

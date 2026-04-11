@@ -56,4 +56,14 @@ impl TerminalTool {
 
         Ok(out_str)
     }
+
+    pub fn execute_action(&self, tool: String, action: String, args: serde_json::Value) -> crate::agent::multi_agent::ToolResult {
+        if action == "execute" {
+            let cmd_string = args.get("command").and_then(|c| c.as_str()).unwrap_or("");
+            let result = self.execute(cmd_string);
+            crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+        } else {
+            crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: false, output: "Unsupported action for terminal".into() }
+        }
+    }
 }

@@ -36,4 +36,14 @@ impl TelegramTool {
             Err(e) => format!("Failed to send Telegram message: {}", e),
         }
     }
+
+    pub async fn execute_action(&self, tool: String, action: String, args: serde_json::Value) -> crate::agent::multi_agent::ToolResult {
+        if action == "send_message" {
+            let message = args.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            let result = self.send_message(message).await;
+            crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.contains("successfully"), output: result }
+        } else {
+            crate::agent::multi_agent::ToolResult { tool_name: tool, action: action.clone(), ok: false, output: format!("Unknown telegram action: {}", action) }
+        }
+    }
 }

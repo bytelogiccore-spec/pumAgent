@@ -72,4 +72,24 @@ impl BrainTool {
             Err(e) => Err(format!("Failed to delete artifact '{}': {}", name, e)),
         }
     }
+
+    pub fn execute_action(&self, tool: String, action: String, args: serde_json::Value) -> crate::agent::multi_agent::ToolResult {
+        let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        match action.as_str() {
+            "list" => {
+                let result = self.list_artifacts();
+                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+            }
+            "read" => {
+                let result = self.read_artifact(name);
+                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+            }
+            "write_artifact" => {
+                let content = args.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                let result = self.write_artifact(name, content);
+                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+            }
+            _ => crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: false, output: "Unsupported action for brain tool".into() }
+        }
+    }
 }

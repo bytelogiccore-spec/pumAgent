@@ -65,4 +65,31 @@ impl Crawler {
 
         Ok(compact_md.trim().to_string())
     }
+
+    pub async fn execute_action(&self, tool: String, action: String, args: serde_json::Value) -> crate::agent::multi_agent::ToolResult {
+        if action == "scrape" {
+            let url = args.get("url").and_then(|u| u.as_str()).unwrap_or("");
+            match self.scrape(url).await {
+                Ok(content) => crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: true,
+                    output: content,
+                },
+                Err(e) => crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: false,
+                    output: format!("Scrape error: {}", e),
+                },
+            }
+        } else {
+            crate::agent::multi_agent::ToolResult {
+                tool_name: tool,
+                action,
+                ok: false,
+                output: "Unsupported action".into(),
+            }
+        }
+    }
 }

@@ -105,37 +105,37 @@ pub fn extract_json_blocks(markdown: &str) -> Vec<Value> {
     }
     // 3. Ultimate Fallback: Scavenge for raw JSON objects containing `"tool"`
     if results.is_empty() {
-        let chars: Vec<char> = markdown.chars().collect();
-        let mut i = 0;
-        while i < chars.len() {
-            if chars[i] == '{' {
-                let mut balance = 0;
-                let mut end = i;
-                for (j, &ch) in chars.iter().enumerate().skip(i) {
-                    if ch == '{' {
-                        balance += 1;
-                    }
-                    if ch == '}' {
-                        balance -= 1;
-                    }
-                    if balance == 0 {
-                        end = j;
-                        break;
-                    }
+        let mut start_search_idx = 0;
+        while let Some(start_mut_rel) = markdown[start_search_idx..].find('{') {
+            let start_byte = start_search_idx + start_mut_rel;
+            let mut balance = 0;
+            let mut end_byte = start_byte;
+
+            for (idx, ch) in markdown[start_byte..].char_indices() {
+                if ch == '{' {
+                    balance += 1;
+                } else if ch == '}' {
+                    balance -= 1;
                 }
-                if balance == 0 && end > i {
-                    let json_str: String = chars[i..=end].iter().collect();
-                    if json_str.contains("\"tool\"") {
-                        if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
-                            if parsed.get("tool").is_some() {
-                                results.push(parsed);
-                            }
-                        }
-                    }
-                    i = end; // Skip to the end of this block
+                if balance == 0 {
+                    end_byte = start_byte + idx + ch.len_utf8();
+                    break;
                 }
             }
-            i += 1;
+
+            if balance == 0 && end_byte > start_byte {
+                let json_slice = &markdown[start_byte..end_byte];
+                if json_slice.contains("\"tool\"") {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(json_slice) {
+                        if parsed.get("tool").is_some() {
+                            results.push(parsed);
+                        }
+                    }
+                }
+                start_search_idx = end_byte; // Skip to the end of this block
+            } else {
+                start_search_idx = start_byte + 1;
+            }
         }
     }
 
