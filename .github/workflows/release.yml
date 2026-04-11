@@ -2,6 +2,11 @@ name: "Release"
 
 on:
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Target version tag (e.g., v0.1.0-beta). If left empty, it will auto-detect from package.json'
+        required: false
+        default: ''
 
 jobs:
   build-tauri:
@@ -45,15 +50,25 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
+      - name: Get Version
+        id: get_version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version_tag }}" ]; then
+            echo "RELEASE_VERSION=${{ github.event.inputs.version_tag }}" >> $GITHUB_ENV
+          else
+            PKG_VER=$(node -p "require('./package.json').version")
+            echo "RELEASE_VERSION=v${PKG_VER}" >> $GITHUB_ENV
+          fi
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # Automatically uses the version from tauri.conf.json
-          tagName: app-v__VERSION__
-          releaseName: 'PumAgent App v__VERSION__'
-          releaseBody: 'Release for PumAgent v__VERSION__'
+          tagName: ${{ env.RELEASE_VERSION }}
+          releaseName: 'PumAgent Release ${{ env.RELEASE_VERSION }}'
+          releaseBody: 'Automated release for PumAgent ${{ env.RELEASE_VERSION }}'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
