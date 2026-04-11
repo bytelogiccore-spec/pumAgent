@@ -87,7 +87,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             .replace("{SCHEDULES}", &schedule_files_md)
             .replace("{SKILLS_RULES}", &skills_rules);
 
-        if !planner_prompt.contains("[AVAILABLE CUSTOM SKILLS & RULES]") {
+        if !planner_prompt.contains("[GLOBAL BEHAVIOR RULES]") {
             planner_prompt.push_str(&format!("\n\n{}", skills_rules));
         }
 
