@@ -1,6 +1,6 @@
+use crate::AgentState;
 use std::fs;
 use tauri::State;
-use crate::AgentState;
 
 #[tauri::command]
 pub fn list_logs(state: State<'_, AgentState>) -> Result<Vec<String>, String> {

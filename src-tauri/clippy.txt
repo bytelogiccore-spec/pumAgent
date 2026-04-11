@@ -1,0 +1,113 @@
+﻿cargo :    Compiling pumagent v0.1.0-beta (D:\ByteLogicCore\AI\PumAgent_Rust\src-tauri)
+At line:1 char:1
++ cargo clippy > clippy.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling pu...Rust\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: unused import: `commands::agent::*`
+  --> src\lib.rs:24:5
+   |
+24 | use commands::agent::*;
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `commands::fs::*`
+  --> src\lib.rs:25:5
+   |
+25 | use commands::fs::*;
+   |     ^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> src\agent\orchestrator\multi_agent.rs:92:13
+   |
+92 |         let mut active_worker_id = self.routing.worker_id.clone();
+   |             ----^^^^^^^^^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `active_worker_id`
+  --> src\agent\orchestrator\multi_agent.rs:92:13
+   |
+92 |         let mut active_worker_id = self.routing.worker_id.clone();
+   |             ^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_active_worker_id`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `active_writer_id` is never read
+   --> src\agent\orchestrator\multi_agent.rs:410:29
+    |
+410 | ...                   active_writer_id = fallback_ep.id.clone();
+    |                       ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `active_writer_id` is never read
+   --> src\agent\orchestrator\multi_agent.rs:245:29
+    |
+245 | ...                   active_writer_id = fallback_ep.id.clone();
+    |                       ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: using `clone` on type `Option<bool>` which implements the `Copy` trait
+   --> src\config.rs:184:62
+    |
+184 |                     config.planner_endpoint_id = route_cloud(config.cloud_routing_planner.clone());
+    |                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try remov
+ing the `clone` call: `config.cloud_routing_planner`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#clone_on_copy
+    = note: `#[warn(clippy::clone_on_copy)]` on by default
+
+warning: using `clone` on type `Option<bool>` which implements the `Copy` trait
+   --> src\config.rs:186:37
+    |
+186 |                         route_cloud(config.cloud_routing_critic.clone().or(Some(true)));
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `con
+fig.cloud_routing_critic`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#clone_on_copy
+
+warning: using `clone` on type `Option<bool>` which implements the `Copy` trait
+   --> src\config.rs:188:37
+    |
+188 |                         route_cloud(config.cloud_routing_writer.clone().or(Some(true)));
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `con
+fig.cloud_routing_writer`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#clone_on_copy
+
+warning: using `clone` on type `Option<bool>` which implements the `Copy` trait
+   --> src\config.rs:189:61
+    |
+189 |                     config.worker_endpoint_id = route_cloud(config.cloud_routing_worker.clone());
+    |                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removin
+g the `clone` call: `config.cloud_routing_worker`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#clone_on_copy
+
+warning: call to `.clone()` on a reference in this situation does nothing
+   --> src\agent\orchestrator\single_agent.rs:160:69
+    |
+160 |                 let primary_err = response_res.as_ref().unwrap_err().clone(); /* get the error clone or format st
+ring */
+    |                                                                     ^^^^^^^^
+    |
+    = note: the type `std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>` does not implemen
+t `Clone`, so calling `clone` on `&std::boxed::Box<dyn std::error::Error + std::marker::Send + std::marker::Sync>` copi
+es the reference, which does not do anything and can be removed
+    = note: `#[warn(noop_method_call)]` on by default
+help: remove this redundant call
+    |
+160 -                 let primary_err = response_res.as_ref().unwrap_err().clone(); /* get the error clone or format st
+ring */
+160 +                 let primary_err = response_res.as_ref().unwrap_err(); /* get the error clone or format string */
+    |
+
+warning: `pumagent` (lib) generated 11 warnings (run `cargo clippy --fix --lib -p pumagent` to apply 9 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.49s

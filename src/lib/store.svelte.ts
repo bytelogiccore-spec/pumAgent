@@ -17,21 +17,28 @@ export interface AttachedFile {
   file: File;
 }
 
+export interface LlmEndpoint {
+  id: string;
+  name: string;
+  api_url: string;
+  model: string;
+  api_key: string;
+  is_enabled: boolean;
+}
+
 export const appState = $state({
+  globalError: null as string | null,
   logExpanded: true,
   sessionId: window.crypto.randomUUID().split('-')[0], // Use short UUID for filename
   config: {
     isFirstRun: true,
-    apiUrl: "http://127.0.0.1:8000/v1/chat/completions",
-    llmApiKey: "",
-    model: "gemma-4",
-    cloudApiUrl: "",
-    cloudLlmApiKey: "",
-    cloudModel: "anthropic/claude-3-opus-20240229",
-    cloudRoutingPlanner: false,
-    cloudRoutingCritic: true,
-    cloudRoutingWriter: true,
-    cloudRoutingWorker: false,
+    endpoints: [] as LlmEndpoint[],
+    plannerEndpointId: "local-primary",
+    criticEndpointId: "cloud-secondary",
+    writerEndpointId: "cloud-secondary",
+    workerEndpointId: "local-primary",
+    reflectorEndpointId: "local-primary",
+    registryEndpointId: "local-primary",
     maxLoops: 3,
     language: "en",
     systemPrompt: "You are a practical AI development assistant. Always respond in Korean.",
@@ -101,6 +108,16 @@ export function addLog(msg: string) {
       // Re-assign to trigger Svelte reactivity
       appState.messages[lastIndex] = lastMsg;
     }
+  }
+}
+
+export function showError(message: any) {
+  if (message instanceof Error) {
+    appState.globalError = message.message;
+  } else if (typeof message === 'string') {
+    appState.globalError = message;
+  } else {
+    appState.globalError = JSON.stringify(message, null, 2);
   }
 }
 

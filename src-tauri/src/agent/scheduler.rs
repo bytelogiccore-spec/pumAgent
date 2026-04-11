@@ -34,7 +34,7 @@ impl Scheduler {
         // Use DBX-Core's native range scan for O(logN + K) performance instead of Full-Scan O(N)
         let start_key = b"schedules:";
         let end_key = b"schedules;"; // Next ASCII char after ':' is ';'
-        
+
         if let Ok(entries) = self.db.range("knowledge_base", start_key, end_key) {
             for (key, val) in entries {
                 if let Ok(key_str) = String::from_utf8(key) {

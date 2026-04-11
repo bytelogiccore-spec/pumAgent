@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter};
 use teloxide::prelude::*;
 use tokio::sync::mpsc;
 
-use crate::agent::llm_client::{ChatMessage, LLMClient};
+use crate::agent::llm_client::ChatMessage;
 use crate::agent::multi_agent::MultiAgent;
 use crate::agent::orchestrator::Orchestrator;
 use crate::AppConfig;
@@ -75,30 +75,16 @@ pub async fn start_telegram_bot(
                     .send_message(msg.chat.id, format!("🤖 처리 시작: `{}`", text))
                     .await;
 
-                // Prepare Orchestrator
-                let local_llm = LLMClient::new(
-                    config.api_url.clone(),
-                    config.model.clone(),
-                    config.llm_api_key.clone(),
-                );
-                let cloud_llm = if config.cloud_api_url.is_empty() {
-                    local_llm.clone()
-                } else {
-                    LLMClient::new(
-                        config.cloud_api_url.clone(),
-                        config.cloud_model.clone(),
-                        config.cloud_llm_api_key.clone(),
-                    )
-                };
-                let routing_flags = super::orchestrator::CloudRoutingFlags {
-                    planner: config.cloud_routing_planner,
-                    critic: config.cloud_routing_critic,
-                    writer: config.cloud_routing_writer,
-                    worker: config.cloud_routing_worker,
+                let routing_flags = super::orchestrator::OrchestratorRouting {
+                    endpoints: config.endpoints.clone(),
+                    planner_id: config.planner_endpoint_id.clone(),
+                    critic_id: config.critic_endpoint_id.clone(),
+                    writer_id: config.writer_endpoint_id.clone(),
+                    worker_id: config.worker_endpoint_id.clone(),
+                    reflector_id: config.reflector_endpoint_id.clone(),
+                    registry_id: config.registry_endpoint_id.clone(),
                 };
                 let orchestrator = Orchestrator::new(
-                    local_llm,
-                    cloud_llm,
                     routing_flags,
                     multi_agent.clone(),
                     base_dir.clone(),

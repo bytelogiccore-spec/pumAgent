@@ -1,8 +1,8 @@
+use crate::agent::llm_client::{ChatMessage, LLMResult};
+use crate::agent::parser::extract_json_blocks;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::agent::parser::extract_json_blocks;
-use crate::agent::llm_client::{ChatMessage, LLMResult};
 
 impl super::Orchestrator {
     #[allow(clippy::too_many_arguments)]
@@ -20,7 +20,10 @@ impl super::Orchestrator {
         log_tx: mpsc::Sender<String>,
         cancel_flag: Arc<AtomicBool>,
     ) -> Result<(String, Vec<ChatMessage>), String> {
-        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks) = self.build_context();
+        let is_background_run = user_messages.is_empty();
+
+        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks) =
+            self.build_context();
 
         let (lang_name, lang_native) = match language {
             "en" => ("ENGLISH", "English"),
@@ -84,6 +87,12 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
 
         let mut loop_count = 0;
 
+        // Local state for failover routing caching during this session
+        let mut active_planner_id = self.routing.planner_id.clone();
+        let mut active_critic_id = self.routing.critic_id.clone();
+        let active_writer_id = self.routing.writer_id.clone();
+        let _active_worker_id = self.routing.worker_id.clone();
+
         loop {
             if cancel_flag.load(Ordering::Relaxed) {
                 let _ = log_tx
@@ -103,8 +112,8 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 break;
             }
 
-            // At step 1, if there are pending scheduled tasks, we auto-inject their prompts
-            if loop_count == 1 && !pending_tasks.is_empty() {
+            // At step 1, if there are pending scheduled tasks AND this was spawned as a background heartbeat (empty user messages)
+            if loop_count == 1 && !pending_tasks.is_empty() && is_background_run {
                 let mut tasks_md = String::from("[SYSTEM: PENDING SCHEDULED TASKS DETECTED]\nThe following scheduled tasks must be executed immediately because their scheduled time has arrived:\n");
                 for (path, sched) in pending_tasks.drain(..) {
                     tasks_md.push_str(&format!(
@@ -112,7 +121,8 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                         sched.name, sched.task_prompt
                     ));
                     // Update last run time so we don't run it again next cycle
-                    crate::agent::scheduler::Scheduler::new(self.db.clone()).update_last_run(&path, sched.clone());
+                    crate::agent::scheduler::Scheduler::new(self.db.clone())
+                        .update_last_run(&path, sched.clone());
                 }
                 tasks_md.push_str("\nPLANNER, please execute the required tool calls to satisfy these scheduled tasks.");
 
@@ -136,9 +146,38 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 ))
                 .await;
 
-            let planner_res = match self.get_llm_for_planner().chat(&history, 0.7).await {
+            let mut planner_res_result = self
+                .get_llm_client_by_id(&active_planner_id)
+                .chat(&history, 0.7)
+                .await;
+            if planner_res_result.is_err() {
+                let err = planner_res_result.as_ref().unwrap_err();
+                let _ = log_tx.send(format!("[경고] 주력 LLM(Planner) 통신 실패: {}. 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...", err)).await;
+
+                for fallback_ep in self.get_fallback_endpoints(&active_planner_id) {
+                    planner_res_result = crate::agent::llm_client::LLMClient::new(
+                        fallback_ep.api_url.clone(),
+                        fallback_ep.model.clone(),
+                        fallback_ep.api_key.clone(),
+                    )
+                    .chat(&history, 0.7)
+                    .await;
+                    if planner_res_result.is_ok() {
+                        active_planner_id = fallback_ep.id.clone();
+                        let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                        break;
+                    }
+                }
+            }
+
+            let planner_res = match planner_res_result {
                 Ok(r) => r,
-                Err(e) => return Err(format!("Planner LLM 에러: {}", e)),
+                Err(e) => {
+                    return Err(format!(
+                        "Planner LLM 최종 통신 불가 (주력 및 예비 모델 모두 실패): {}",
+                        e
+                    ))
+                }
             };
 
             let json_blocks = extract_json_blocks(&planner_res.content);
@@ -190,14 +229,30 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 let _ = log_tx
                     .send("[Writer] 최종 답변 작성 중...".to_string())
                     .await;
-                let writer_res = self
-                    .get_llm_for_writer()
+                let mut writer_res_result = self
+                    .get_llm_client_by_id(&active_writer_id)
                     .chat(&writer_history, 0.7)
-                    .await
-                    .unwrap_or_else(|_| LLMResult {
-                        content: planner_res.content.clone(),
-                        raw: serde_json::Value::Null,
-                    });
+                    .await;
+                if writer_res_result.is_err() {
+                    let _ = log_tx.send("[경고] Writer LLM 에러, 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...".to_string()).await;
+                    for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
+                        writer_res_result = crate::agent::llm_client::LLMClient::new(
+                            fallback_ep.api_url.clone(),
+                            fallback_ep.model.clone(),
+                            fallback_ep.api_key.clone(),
+                        )
+                        .chat(&writer_history, 0.7)
+                        .await;
+                        if writer_res_result.is_ok() {
+                            let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                            break;
+                        }
+                    }
+                }
+                let writer_res = writer_res_result.unwrap_or_else(|_| LLMResult {
+                    content: planner_res.content.clone(),
+                    raw: serde_json::Value::Null,
+                });
 
                 history.push(ChatMessage {
                     role: "assistant".to_string(),
@@ -225,7 +280,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 .multi_agent
                 .execute_tools(
                     json_blocks,
-                    Some(self.local_llm.clone()),
+                    Some(self.get_llm_for_planner()),
                     registry_prompt_opt.map(|s| s.to_string()),
                 )
                 .await;
@@ -268,21 +323,47 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 .replace("{QUERY}", &query)
                 .replace("{RESULT_SUMMARY}", &result_summary_md);
 
-            let critic_res = self
+            let mut critic_res_result = self
                 .get_llm_for_critic()
                 .chat(
                     &[ChatMessage {
                         role: "user".to_string(),
-                        content: critic_prompt,
+                        content: critic_prompt.clone(),
                         images_base64: None,
                     }],
                     0.2,
                 )
-                .await
-                .unwrap_or_else(|_| LLMResult {
-                    content: "STATUS: PASS".to_string(),
-                    raw: serde_json::Value::Null,
-                });
+                .await;
+
+            if critic_res_result.is_err() {
+                let _ = log_tx.send("[경고] Critic LLM 에러, 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...".to_string()).await;
+                for fallback_ep in self.get_fallback_endpoints(&active_critic_id) {
+                    critic_res_result = crate::agent::llm_client::LLMClient::new(
+                        fallback_ep.api_url.clone(),
+                        fallback_ep.model.clone(),
+                        fallback_ep.api_key.clone(),
+                    )
+                    .chat(
+                        &[ChatMessage {
+                            role: "user".to_string(),
+                            content: critic_prompt.clone(),
+                            images_base64: None,
+                        }],
+                        0.2,
+                    )
+                    .await;
+                    if critic_res_result.is_ok() {
+                        active_critic_id = fallback_ep.id.clone();
+                        let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                        break;
+                    }
+                }
+            }
+
+            let critic_res = critic_res_result.unwrap_or_else(|_| LLMResult {
+                content: "STATUS: PASS".to_string(),
+                raw: serde_json::Value::Null,
+            });
 
             if critic_res.content.contains("STATUS: PASS") {
                 let _ = log_tx
@@ -312,14 +393,30 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
                 let _ = log_tx
                     .send("[Writer] 최종 답변 정리 중...".to_string())
                     .await;
-                let writer_res = self
-                    .get_llm_for_writer()
+                let mut writer_res_result = self
+                    .get_llm_client_by_id(&active_writer_id)
                     .chat(&writer_history, 0.7)
-                    .await
-                    .unwrap_or_else(|_| LLMResult {
-                        content: "Writer 에러".to_string(),
-                        raw: serde_json::Value::Null,
-                    });
+                    .await;
+                if writer_res_result.is_err() {
+                    let _ = log_tx.send("[경고] Writer LLM 에러, 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...".to_string()).await;
+                    for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
+                        writer_res_result = crate::agent::llm_client::LLMClient::new(
+                            fallback_ep.api_url.clone(),
+                            fallback_ep.model.clone(),
+                            fallback_ep.api_key.clone(),
+                        )
+                        .chat(&writer_history, 0.7)
+                        .await;
+                        if writer_res_result.is_ok() {
+                            let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                            break;
+                        }
+                    }
+                }
+                let writer_res = writer_res_result.unwrap_or_else(|_| LLMResult {
+                    content: "Writer 에러".to_string(),
+                    raw: serde_json::Value::Null,
+                });
 
                 history.push(ChatMessage {
                     role: "assistant".to_string(),
@@ -348,87 +445,5 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
             "에이전트 파이프라인이 결론을 짓지 못하고 종료되었습니다.".to_string(),
             history,
         ))
-    }
-
-    pub async fn run_reflector_pipeline(
-        &self,
-        reflector_prompt: &str,
-        mut history: Vec<ChatMessage>,
-        log_tx: mpsc::Sender<String>,
-    ) {
-        let _ = log_tx
-            .send("[Reflector] 백그라운드 회고(Memory/Schedule)를 시작합니다.".to_string())
-            .await;
-
-        let system_msg = ChatMessage {
-            role: "system".to_string(),
-            content: reflector_prompt.to_string(),
-            images_base64: None,
-        };
-
-        // Insert the system prompt at the beginning of the history so the LLM knows it is the Reflector.
-        history.insert(0, system_msg);
-
-        // Append a prompt asking it to execute tools now if needed
-        history.push(ChatMessage {
-            role: "user".to_string(),
-            content: "You have reviewed the conversation. If you need to store anything in the brain or schedule a task, output the appropriate JSON tool blocks now. If no memory or scheduling is needed, reply exactly 'NO_MEMORY_NEEDED'.".to_string(), images_base64: None });
-
-        let reflector_res = self
-            .local_llm
-            .chat(&history, 0.7)
-            .await
-            .unwrap_or_else(|_| LLMResult {
-                content: "NO_MEMORY_NEEDED".to_string(),
-                raw: serde_json::Value::Null,
-            });
-
-        let ai_text = reflector_res.content.clone();
-        if ai_text.trim() == "NO_MEMORY_NEEDED" {
-            let _ = log_tx
-                .send("[Reflector] 추가 기록 항목이 없습니다. 종료합니다.".to_string())
-                .await;
-            return;
-        }
-
-        let tool_calls = extract_json_blocks(&ai_text);
-        if tool_calls.is_empty() {
-            let _ = log_tx
-                .send("[Reflector] 구조화된 툴 호출이 발견되지 않았습니다. 종료합니다.".to_string())
-                .await;
-            return;
-        }
-
-        let _ = log_tx
-            .send(format!(
-                "[Reflector] {}개의 툴 작업을 식별하여 백그라운드에서 실행합니다.",
-                tool_calls.len()
-            ))
-            .await;
-
-        // Execute the tools
-        let results = self
-            .multi_agent
-            .execute_tools(tool_calls, Some(self.local_llm.clone()), None)
-            .await;
-
-        for r in results {
-            if r.ok
-                && (r.action == "write" || r.action == "write_artifact")
-                && (r.tool_name == "brain" || r.tool_name == "knowledge")
-            {
-                let _ = log_tx
-                    .send(format!(
-                        "[DB 저장 백그라운드] 💾 {} 도구를 통해 데이터가 병합되었습니다.",
-                        r.tool_name
-                    ))
-                    .await;
-            }
-        }
-
-        // Optionally, log results
-        let _ = log_tx
-            .send("[Reflector] 백그라운드 회고 저장을 완료했습니다.".to_string())
-            .await;
     }
 }

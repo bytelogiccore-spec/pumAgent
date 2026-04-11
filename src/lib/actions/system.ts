@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { appState, addLog } from "../store.svelte";
+import { appState, addLog, showError } from "../store.svelte";
 import { t } from "../i18n.svelte";
 
 export async function interceptSlashCommand(cmd: string): Promise<boolean> {
@@ -106,7 +106,7 @@ export async function deleteSysItem(name: string) {
     }
     addLog(t("sys.del_done", { name }));
   } catch (e) {
-    alert(`Delete failed: ${e}`);
+    showError(`Delete failed: ${e}`);
   }
 }
 
@@ -123,7 +123,7 @@ export async function deleteSelectedLogs() {
     addLog(t("sys.del_logs_done", { count: appState.selectedLogs.length }));
     appState.selectedLogs = [];
   } catch (e) {
-    alert(`Bulk delete failed: ${e}`);
+    showError(`Bulk delete failed: ${e}`);
   }
 }
 
@@ -145,7 +145,7 @@ export async function saveSysItem() {
     addLog(t("sys.save_done", { name: appState.viewingItemName }));
     alert(t("sys.save_success"));
   } catch (e) {
-    alert(`Save failed: ${e}`);
+    showError(`Save failed: ${e}`);
   }
 }
 
@@ -189,7 +189,7 @@ export async function createSysItem() {
     appState.viewingItemName = name;
     appState.viewingItemContent = initialContent;
   } catch (e) {
-    alert(`Create failed: ${e}`);
+    showError(`Create failed: ${e}`);
   }
 }
 
@@ -198,17 +198,12 @@ export async function loadSettings() {
     const configData: any = await invoke("load_config");
     console.log("Loaded config:", configData);
     if (configData) {
-      if (configData.api_url) appState.config.apiUrl = configData.api_url;
-      if (configData.llm_api_key) appState.config.llmApiKey = configData.llm_api_key;
-      if (configData.model) appState.config.model = configData.model;
-      if (configData.cloud_api_url) appState.config.cloudApiUrl = configData.cloud_api_url;
-      if (configData.cloud_llm_api_key) appState.config.cloudLlmApiKey = configData.cloud_llm_api_key;
-      if (configData.cloud_model) appState.config.cloudModel = configData.cloud_model;
-      
-      appState.config.cloudRoutingPlanner = !!configData.cloud_routing_planner;
-      appState.config.cloudRoutingCritic = !!configData.cloud_routing_critic;
-      appState.config.cloudRoutingWriter = !!configData.cloud_routing_writer;
-      appState.config.cloudRoutingWorker = !!configData.cloud_routing_worker;
+      if (configData.endpoints) appState.config.endpoints = configData.endpoints;
+      if (configData.planner_endpoint_id) appState.config.plannerEndpointId = configData.planner_endpoint_id;
+      if (configData.critic_endpoint_id) appState.config.criticEndpointId = configData.critic_endpoint_id;
+      if (configData.worker_endpoint_id) appState.config.workerEndpointId = configData.worker_endpoint_id;
+      if (configData.reflector_endpoint_id) appState.config.reflectorEndpointId = configData.reflector_endpoint_id;
+      if (configData.registry_endpoint_id) appState.config.registryEndpointId = configData.registry_endpoint_id;
 
       if (configData.max_loops) appState.config.maxLoops = configData.max_loops;
       if (configData.language) appState.config.language = configData.language;
@@ -243,20 +238,17 @@ export async function loadSettings() {
   }
 }
 
-export async function saveSettings() {
+export async function saveSettings(closeModal: boolean = true) {
   try {
     await invoke("save_config", {
       config: {
-        api_url: appState.config.apiUrl,
-        llm_api_key: appState.config.llmApiKey,
-        model: appState.config.model,
-        cloud_api_url: appState.config.cloudApiUrl,
-        cloud_llm_api_key: appState.config.cloudLlmApiKey,
-        cloud_model: appState.config.cloudModel,
-        cloud_routing_planner: appState.config.cloudRoutingPlanner,
-        cloud_routing_critic: appState.config.cloudRoutingCritic,
-        cloud_routing_writer: appState.config.cloudRoutingWriter,
-        cloud_routing_worker: appState.config.cloudRoutingWorker,
+        is_first_run: appState.config.isFirstRun,
+        endpoints: appState.config.endpoints,
+        planner_endpoint_id: appState.config.plannerEndpointId,
+        writer_endpoint_id: appState.config.writerEndpointId,
+        worker_endpoint_id: appState.config.workerEndpointId,
+        reflector_endpoint_id: appState.config.reflectorEndpointId,
+        registry_endpoint_id: appState.config.registryEndpointId,
         max_loops: appState.config.maxLoops,
         language: appState.config.language,
         system_prompt: appState.config.systemPrompt,
@@ -281,10 +273,12 @@ export async function saveSettings() {
       },
     });
     await invoke("flush_db");
-    appState.sysModalOpen = false;
+    if (closeModal) {
+      appState.sysModalOpen = false;
+    }
     addLog(t("sys.config_saved"));
     addLog(t("sys.db_flush"));
-  } catch (err) {
+  } catch (err: any) {
     addLog(t("settings.save_err", { err }));
   }
 }

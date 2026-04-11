@@ -15,6 +15,8 @@
     stopAgent,
     wipeChat,
     compressChatMemory,
+    deleteSysItem,
+    showError,
   } from "../lib/store.svelte";
   import { t } from "../lib/i18n.svelte";
   import ChatMessage from "./ChatMessage.svelte";
@@ -98,7 +100,7 @@
   function startVoiceInput() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("이 브라우저(Tauri/WebView)에서는 음성 인식을 지원하지 않습니다.");
+      showError("이 브라우저(Tauri/WebView)에서는 음성 인식을 지원하지 않습니다.");
       return;
     }
     
@@ -130,7 +132,7 @@
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error", event.error);
-      alert("음성 인식 오류: " + event.error);
+      showError("음성 인식 오류: " + event.error);
       isRecording = false;
       recognitionRef = null;
     };
@@ -335,7 +337,16 @@
       </div>
       <div>
         {#if appState.config.heartbeatEnabled}
-          <span style="color:#2563eb; margin-right: 12px; font-weight:500;" title="Heartbeat Remaining">HB: {appState.heartbeatRemainingSec}s</span>
+          <div style="display:flex; align-items:center; gap:4px; font-weight:600; color:#e0005a;" title="Heartbeat Remaining">
+            <svg class="heart-icon {appState.heartbeatRemainingSec <= 5 ? 'fast-beat' : 'normal-beat'}" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+            </svg>
+            {#if appState.isThinking && appState.heartbeatRemainingSec === 0}
+              <span>Waiting...</span>
+            {:else}
+              <span style="font-variant-numeric: tabular-nums;">{appState.heartbeatRemainingSec}s</span>
+            {/if}
+          </div>
         {/if}
         {#if appState.isThinking}
           <span style="color:#e0005a; animation:pulse 1s infinite alternate;">Elapsed: {appState.elapsedSec}s</span>
@@ -378,7 +389,6 @@
     color: #1a1a1a;
   }
 
-  .settings-toggle,
   .toggle-btn {
     background: transparent;
     border: 1px solid #1a1a1a;
@@ -393,7 +403,6 @@
     letter-spacing: 0.05em;
     transition: all 0.2s ease;
   }
-  .settings-toggle:hover,
   .toggle-btn:hover {
     background: #1a1a1a;
     color: #f5f3ed;
@@ -410,37 +419,6 @@
   }
 
 
-
-  .badges-row {
-    display: flex;
-    gap: 8px;
-    padding: 0 28px 16px 28px;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    background: #f5f3ed;
-  }
-  .badges-row::-webkit-scrollbar {
-    display: none;
-  }
-
-  .sys-badge {
-    flex-shrink: 0;
-    background: #fcfbf8;
-    border: 1px solid #1a1a1a;
-    padding: 6px 16px;
-    border-radius: 0;
-    color: #1a1a1a;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: 0.2s;
-  }
-  /* Impeccable Accent Color on Hover */
-  .sys-badge:hover {
-    background: #e0005a;
-    color: #fcfbf8;
-    border-color: #e0005a;
-  }
 
   .input-area {
     position: relative;
@@ -636,26 +614,7 @@
     outline: none;
   }
 
-  .voice-ptt-btn {
-    flex: 1;
-    padding: 12px 0;
-    margin: 0 8px;
-    border: none;
-    background: transparent;
-    color: #1a1a1a;
-    font-size: 1.05rem;
-    font-weight: 600;
-    cursor: pointer;
-    border-radius: 12px;
-    transition: background 0.2s, color 0.2s;
-  }
-  .voice-ptt-btn:hover {
-    background: #d4d4d8;
-  }
-  .voice-ptt-btn.recording {
-    background: #1a1a1a;
-    color: #f5f3ed;
-  }
+
 
   .toggle-voice-btn.recording {
     color: #ef4444;
@@ -691,8 +650,25 @@
     opacity: 1;
   }
   @keyframes pulse {
-    from { opacity: 0.6; }
-    to { opacity: 1; }
+    from { color: #1a1a1a; }
+    to { color: #e0005a; }
+  }
+
+  @keyframes beat {
+    0% { transform: scale(1); }
+    15% { transform: scale(1.3); }
+    30% { transform: scale(1); }
+    45% { transform: scale(1.3); }
+    60% { transform: scale(1); }
+    100% { transform: scale(1); }
+  }
+
+  .heart-icon.normal-beat {
+    animation: beat 2s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+  
+  .heart-icon.fast-beat {
+    animation: beat 1s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
   }
 
   .modal-overlay {

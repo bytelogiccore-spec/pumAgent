@@ -15,10 +15,12 @@ impl BrainTool {
         let mut count = 0;
 
         if let Ok(entries) = self.db.scan("brain_artifacts") {
-            for (key, _) in entries {
-                if let Ok(name) = String::from_utf8(key) {
-                    list_md.push_str(&format!("- {}\n", name));
-                    count += 1;
+            for (key, val) in entries {
+                if val != b"__PUM_DELETED__" {
+                    if let Ok(name) = String::from_utf8(key) {
+                        list_md.push_str(&format!("- {}\n", name));
+                        count += 1;
+                    }
                 }
             }
         }
@@ -73,23 +75,48 @@ impl BrainTool {
         }
     }
 
-    pub fn execute_action(&self, tool: String, action: String, args: serde_json::Value) -> crate::agent::multi_agent::ToolResult {
+    pub fn execute_action(
+        &self,
+        tool: String,
+        action: String,
+        args: serde_json::Value,
+    ) -> crate::agent::multi_agent::ToolResult {
         let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
         match action.as_str() {
             "list" => {
                 let result = self.list_artifacts();
-                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: result.is_ok(),
+                    output: result.unwrap_or_else(|e| e),
+                }
             }
             "read" => {
                 let result = self.read_artifact(name);
-                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: result.is_ok(),
+                    output: result.unwrap_or_else(|e| e),
+                }
             }
             "write_artifact" => {
                 let content = args.get("content").and_then(|c| c.as_str()).unwrap_or("");
                 let result = self.write_artifact(name, content);
-                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: result.is_ok(),
+                    output: result.unwrap_or_else(|e| e),
+                }
             }
-            _ => crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: false, output: "Unsupported action for brain tool".into() }
+            _ => crate::agent::multi_agent::ToolResult {
+                tool_name: tool,
+                action,
+                ok: false,
+                output: "Unsupported action for brain tool".into(),
+            },
         }
     }
 }

@@ -1,8 +1,8 @@
+use crate::agent::llm_client::ChatMessage;
+use crate::agent::parser::extract_json_blocks;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::agent::parser::extract_json_blocks;
-use crate::agent::llm_client::ChatMessage;
 
 impl super::Orchestrator {
     #[allow(clippy::too_many_arguments)]
@@ -21,6 +21,8 @@ impl super::Orchestrator {
         log_tx: mpsc::Sender<String>,
         cancel_flag: Arc<AtomicBool>,
     ) -> Result<(String, Vec<ChatMessage>), String> {
+        let is_background_run = user_messages.is_empty();
+
         if use_multi_agent_workflow {
             return self
                 .run_multi_agent_pipeline(
@@ -46,7 +48,8 @@ impl super::Orchestrator {
             _ => ("KOREAN", "한국어"),
         };
 
-        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks) = self.build_context();
+        let (current_time, brain_files_md, schedule_files_md, mut pending_tasks) =
+            self.build_context();
 
         let force_tool_prompt = format!(
             r#"[USER DEFINED SYSTEM PROMPT]
@@ -99,6 +102,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
         history.extend(user_messages);
 
         let mut loop_count = 0;
+        let mut active_worker_id = self.routing.worker_id.clone();
 
         loop {
             if cancel_flag.load(Ordering::Relaxed) {
@@ -120,7 +124,8 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
             }
 
             // At step 1, if there are pending scheduled tasks, we auto-inject their prompts
-            if loop_count == 1 && !pending_tasks.is_empty() {
+            // At step 1, if there are pending scheduled tasks AND this was spawned as a background heartbeat (empty user messages)
+            if loop_count == 1 && !pending_tasks.is_empty() && is_background_run {
                 let mut tasks_md = String::from("[SYSTEM: PENDING SCHEDULED TASKS DETECTED]\nThe following scheduled tasks must be executed immediately because their scheduled time has arrived:\n");
                 for (path, sched) in pending_tasks.drain(..) {
                     tasks_md.push_str(&format!(
@@ -128,7 +133,8 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                         sched.name, sched.task_prompt
                     ));
                     // Update last run time so we don't run it again next cycle
-                    crate::agent::scheduler::Scheduler::new(self.db.clone()).update_last_run(&path, sched.clone());
+                    crate::agent::scheduler::Scheduler::new(self.db.clone())
+                        .update_last_run(&path, sched.clone());
                 }
                 tasks_md.push_str("\nAGENT, please execute the required tool calls to satisfy these scheduled tasks.");
 
@@ -149,11 +155,35 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                 .send(format!("[Step {}/LLM] AI 응답 대기 중...", loop_count))
                 .await;
 
-            let response = match self.get_llm_for_worker().chat(&history, 0.7).await {
+            let mut response_res = self
+                .get_llm_client_by_id(&active_worker_id)
+                .chat(&history, 0.7)
+                .await;
+            if response_res.is_err() {
+                let primary_err = response_res.as_ref().unwrap_err(); /* get the error clone or format string */
+                let _ = log_tx.send(format!("[경고] 주력 LLM 통신 실패: {}. 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...", primary_err)).await;
+
+                for fallback_ep in self.get_fallback_endpoints(&active_worker_id) {
+                    response_res = crate::agent::llm_client::LLMClient::new(
+                        fallback_ep.api_url.clone(),
+                        fallback_ep.model.clone(),
+                        fallback_ep.api_key.clone(),
+                    )
+                    .chat(&history, 0.7)
+                    .await;
+                    if response_res.is_ok() {
+                        active_worker_id = fallback_ep.id.clone();
+                        let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                        break;
+                    }
+                }
+            }
+
+            let response = match response_res {
                 Ok(res) => res,
                 Err(e) => {
-                    let err_msg = format!("LLM 통신 에러: {}", e);
-                    let _ = log_tx.send(format!("[오류] {}", err_msg)).await;
+                    let err_msg = format!("최종 LLM 통신 불가 (활성화된 모든 모델 실패): {}", e);
+                    let _ = log_tx.send(format!("[치명적 오류] {}", err_msg)).await;
                     return Err(err_msg);
                 }
             };
@@ -208,7 +238,7 @@ Current System Time: {} (You live in this exact present moment. Use this to accu
                 .multi_agent
                 .execute_tools(
                     tool_calls,
-                    Some(self.local_llm.clone()),
+                    Some(self.get_llm_client_by_id(&active_worker_id)),
                     registry_prompt_opt.map(|s| s.to_string()),
                 )
                 .await;

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { appState, addLog } from "../store.svelte";
+import { appState, addLog, showError } from "../store.svelte";
 import { t } from "../i18n.svelte";
 import { interceptSlashCommand } from "./system";
 
@@ -19,7 +19,7 @@ export function wipeChat() {
 
 export async function compressChatMemory(silent: boolean = false) {
   if (appState.messages.length <= 4) {
-    if (!silent) alert(t("sys.compress_error_count"));
+    if (!silent) showError(t("sys.compress_error_count"));
     return;
   }
   
@@ -34,9 +34,7 @@ export async function compressChatMemory(silent: boolean = false) {
     let recentMessages = appState.messages.slice(appState.messages.length - recentCount);
 
     let payload = {
-      api_url: appState.config.apiUrl,
-      llm_api_key: appState.config.llmApiKey,
-      model: appState.config.model,
+      endpoints: appState.config.endpoints,
       messages: oldMessages,
     };
 
@@ -51,9 +49,9 @@ export async function compressChatMemory(silent: boolean = false) {
     ];
     
     addLog(t("sys.compress_done", { count: oldMessages.length }));
-  } catch (err) {
+  } catch (err: any) {
     addLog(t("sys.compress_error", { err }));
-    alert(t("sys.compress_error_alert", { err }));
+    showError(t("sys.compress_error_alert", { err }));
   } finally {
     appState.isThinking = false;
     processPendingQueues();
@@ -65,24 +63,21 @@ export async function stopAgent() {
     await invoke("stop_agent");
     addLog(t("sys.cancel_req"));
   } catch (e) {
-    alert(`Stop failed: ${e}`);
+    showError(`Stop failed: ${e}`);
   }
 }
 
 export async function triggerHeartbeat() {
   try {
     let payload = {
-      api_url: appState.config.apiUrl,
       session_id: null,
-      llm_api_key: appState.config.llmApiKey,
-      model: appState.config.model,
-      cloud_api_url: appState.config.cloudApiUrl,
-      cloud_llm_api_key: appState.config.cloudLlmApiKey,
-      cloud_model: appState.config.cloudModel,
-      cloud_routing_planner: appState.config.cloudRoutingPlanner,
-      cloud_routing_critic: appState.config.cloudRoutingCritic,
-      cloud_routing_writer: appState.config.cloudRoutingWriter,
-      cloud_routing_worker: appState.config.cloudRoutingWorker,
+      endpoints: appState.config.endpoints,
+      planner_endpoint_id: appState.config.plannerEndpointId,
+      critic_endpoint_id: appState.config.criticEndpointId,
+      writer_endpoint_id: appState.config.writerEndpointId,
+      worker_endpoint_id: appState.config.workerEndpointId,
+      reflector_endpoint_id: appState.config.reflectorEndpointId,
+      registry_endpoint_id: appState.config.registryEndpointId,
       system_prompt: appState.config.systemPrompt,
       planner_prompt: appState.config.plannerPrompt,
       critic_prompt: appState.config.criticPrompt,
@@ -107,7 +102,7 @@ export async function triggerHeartbeat() {
     } else {
       addLog(t("sys.hb_start"));
     }
-  } catch (err) {
+  } catch (err: any) {
     addLog(t("sys.hb_err", { err }));
   } finally {
     processPendingQueues();
@@ -117,17 +112,14 @@ export async function triggerHeartbeat() {
 export async function internalExecuteAgent() {
   try {
     let payload = {
-      api_url: appState.config.apiUrl,
       session_id: appState.sessionId,
-      llm_api_key: appState.config.llmApiKey,
-      model: appState.config.model,
-      cloud_api_url: appState.config.cloudApiUrl,
-      cloud_llm_api_key: appState.config.cloudLlmApiKey,
-      cloud_model: appState.config.cloudModel,
-      cloud_routing_planner: appState.config.cloudRoutingPlanner,
-      cloud_routing_critic: appState.config.cloudRoutingCritic,
-      cloud_routing_writer: appState.config.cloudRoutingWriter,
-      cloud_routing_worker: appState.config.cloudRoutingWorker,
+      endpoints: appState.config.endpoints,
+      planner_endpoint_id: appState.config.plannerEndpointId,
+      critic_endpoint_id: appState.config.criticEndpointId,
+      writer_endpoint_id: appState.config.writerEndpointId,
+      worker_endpoint_id: appState.config.workerEndpointId,
+      reflector_endpoint_id: appState.config.reflectorEndpointId,
+      registry_endpoint_id: appState.config.registryEndpointId,
       system_prompt: appState.config.systemPrompt,
       planner_prompt: appState.config.plannerPrompt,
       critic_prompt: appState.config.criticPrompt,
@@ -149,7 +141,7 @@ export async function internalExecuteAgent() {
     let lastMsg = appState.messages[lastIndex];
     lastMsg.content = results.final_output;
     appState.messages[lastIndex] = lastMsg;
-  } catch (err) {
+  } catch (err: any) {
     addLog(t("sys.bridge_err", { err }));
     let lastIndex = appState.messages.length - 1;
     let lastMsg = appState.messages[lastIndex];

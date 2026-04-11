@@ -88,27 +88,59 @@ impl LLMClient {
             messages: json_messages,
         };
 
-        let mut req = self
-            .client
-            .post(&self.base_url)
-            .header("Content-Type", "application/json; charset=utf-8");
+        let mut retries = 0;
+        let max_retries = 3;
+        let mut base_delay = Duration::from_secs(2);
 
-        if !self.api_key.is_empty() {
-            req = req.header("Authorization", format!("Bearer {}", self.api_key));
-        }
+        let response = loop {
+            let mut req = self
+                .client
+                .post(&self.base_url)
+                .header("Content-Type", "application/json; charset=utf-8")
+                .header(
+                    "HTTP-Referer",
+                    "https://github.com/bytelogiccore-spec/pumAgent",
+                )
+                .header("X-Title", "PumAgent");
 
-        let response = req.json(&payload).send().await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-
-            if text.contains("image input is not supported") || text.contains("mmproj") {
-                return Err("오류: 현재 연결된 LLM 모델이 이미지(Vision) 분석을 지원하지 않거나, 멀티모달(mmproj) 프로젝터가 로드되지 않았습니다. 사진 첨부를 해제하거나 비전 지원 모델을 사용해주세요.".into());
+            if !self.api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {}", self.api_key));
             }
 
-            return Err(format!("HTTP 오류: {} - {}", status, text).into());
-        }
+            let response = req.json(&payload).send().await?;
+
+            if response.status().is_success() {
+                break response;
+            } else if response.status().as_u16() == 429 || response.status().is_server_error() {
+                if retries >= max_retries {
+                    return Err(format!(
+                        "HTTP 오류 ({}회 재시도 초과): {}",
+                        max_retries,
+                        response.status()
+                    )
+                    .into());
+                }
+                retries += 1;
+                log::warn!(
+                    "LLM API rate limited (429) or Server Error. Retrying {}/{} in {}s...",
+                    retries,
+                    max_retries,
+                    base_delay.as_secs()
+                );
+                tokio::time::sleep(base_delay).await;
+                base_delay *= 2; // Exponential backoff
+                continue;
+            } else {
+                let status = response.status();
+                let text = response.text().await.unwrap_or_default();
+
+                if text.contains("image input is not supported") || text.contains("mmproj") {
+                    return Err("오류: 현재 연결된 LLM 모델이 이미지(Vision) 분석을 지원하지 않거나, 멀티모달(mmproj) 프로젝터가 로드되지 않았습니다. 사진 첨부를 해제하거나 비전 지원 모델을 사용해주세요.".into());
+                }
+
+                return Err(format!("HTTP 오류: {} - {}", status, text).into());
+            }
+        };
 
         let raw_json: Value = response.json().await?;
 
@@ -116,9 +148,8 @@ impl LLMClient {
         let mut content = msg_obj["content"].as_str().unwrap_or_default().to_string();
 
         if let Some(reasoning) = msg_obj.get("reasoning_content").and_then(|v| v.as_str()) {
-            if !reasoning.is_empty()
-                && !content.contains(&reasoning[..std::cmp::min(20, reasoning.len())])
-            {
+            let prefix: String = reasoning.chars().take(20).collect();
+            if !reasoning.is_empty() && !content.contains(&prefix) {
                 content = format!("<think>\n{}\n</think>\n\n{}", reasoning, content);
             }
         }

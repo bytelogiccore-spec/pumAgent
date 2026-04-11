@@ -6,6 +6,7 @@
   import LogPanel from "./components/LogPanel.svelte";
   import ChatSection from "./components/ChatSection.svelte";
   import StartupWizard from "./components/StartupWizard.svelte";
+  import ErrorPopup from "./components/ErrorPopup.svelte";
   import { appState, addLog, triggerHeartbeat } from "./lib/store.svelte";
   import { initLocales, t } from "./lib/i18n.svelte";
 
@@ -23,6 +24,10 @@
   onMount(async () => {
     listen<string>("tool_log", (event) => {
       addLog(event.payload);
+    });
+
+    listen<string>("system_panic", (event) => {
+      appState.globalError = event.payload;
     });
 
     listen<number>("heartbeat_progress", (event) => {
@@ -44,16 +49,6 @@
       // Override specific mappings
       appState.config.isFirstRun = loadedConfig.is_first_run ?? true;
       appState.config.language = loadedConfig.language || "en";
-      appState.config.apiUrl = loadedConfig.api_url;
-      appState.config.model = loadedConfig.model || "gemma-4";
-      appState.config.llmApiKey = loadedConfig.llm_api_key || "";
-      appState.config.cloudApiUrl = loadedConfig.cloud_api_url || "";
-      appState.config.cloudModel = loadedConfig.cloud_model || "anthropic/claude-3-opus-20240229";
-      appState.config.cloudLlmApiKey = loadedConfig.cloud_llm_api_key || "";
-      appState.config.cloudRoutingPlanner = loadedConfig.cloud_routing_planner ?? false;
-      appState.config.cloudRoutingCritic = loadedConfig.cloud_routing_critic ?? true;
-      appState.config.cloudRoutingWriter = loadedConfig.cloud_routing_writer ?? true;
-      appState.config.cloudRoutingWorker = loadedConfig.cloud_routing_worker ?? false;
       appState.config.maxLoops = loadedConfig.max_loops || 3;
       appState.config.systemPrompt = loadedConfig.system_prompt || appState.config.systemPrompt;
       appState.config.searchProvider = loadedConfig.search_provider || "duckduckgo";
@@ -91,6 +86,7 @@
 </script>
 
 <main class="app-container">
+  <ErrorPopup />
   {#if appState.config.isFirstRun}
     <StartupWizard />
   {:else if appState.sysModalOpen}

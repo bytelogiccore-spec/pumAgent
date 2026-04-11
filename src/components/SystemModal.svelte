@@ -9,7 +9,7 @@
     try {
       await invoke("flush_db");
       addLog(t("sys.db_flush"));
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Failed to flush db:", e);
       addLog(t("sys.db_flush_err", { err: e }));
     }

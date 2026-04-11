@@ -122,7 +122,7 @@
               <input id="schedEndDate" type="text" bind:value={scheduleData.end_date} oninput={syncScheduleData} placeholder={t("knowledge.ph_end")} />
             </div>
             <div class="form-group" style="flex: 1;">
-              <label>{t("knowledge.label_next_time")}</label>
+              <span style="display:block; margin-bottom:8px; font-weight:600; font-size:0.85rem; color:#a1a1aa; text-transform:uppercase;">{t("knowledge.label_next_time")}</span>
               <div style="padding: 8px 12px; background: #e0f2fe; color: #0369a1; border-radius: 6px; font-weight: 600; font-size: 0.85rem; border: 1px solid #bae6fd;">
                 🕒 {nextExecutionText}
               </div>

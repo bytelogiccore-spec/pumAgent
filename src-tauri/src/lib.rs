@@ -1,8 +1,8 @@
 pub mod agent;
-pub mod tools;
 pub mod commands;
 pub mod config;
 pub mod state;
+pub mod tools;
 
 use config::AppConfig;
 use state::AgentState;
@@ -12,7 +12,7 @@ use dbx_core::Database;
 use std::fs;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use tauri::{Manager, Emitter};
+use tauri::{Emitter, Manager};
 use tools::brain::BrainTool;
 use tools::crawler::Crawler;
 use tools::knowledge::KnowledgeTool;
@@ -21,8 +21,6 @@ use tools::telegram_tool::TelegramTool;
 use tools::terminal::TerminalTool;
 
 // Import our isolated commands
-use commands::fs::*;
-use commands::agent::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -36,6 +34,26 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let app_handle = app.handle().clone();
+            std::panic::set_hook(Box::new(move |info| {
+                let msg = match info.payload().downcast_ref::<&'static str>() {
+                    Some(s) => *s,
+                    None => match info.payload().downcast_ref::<String>() {
+                        Some(s) => &s[..],
+                        None => "Unknown panic",
+                    },
+                };
+                let location = info.location().unwrap();
+                let error_message = format!(
+                    "Rust Panic! File: {}, Line: {}\n\n{}",
+                    location.file(),
+                    location.line(),
+                    msg
+                );
+                eprintln!("[PumAgent Panic] {}", error_message);
+                let _ = app_handle.emit("system_panic", error_message);
+            }));
+
             #[cfg(debug_assertions)]
             let base_dir = std::env::current_dir()
                 .unwrap_or_default()
@@ -204,7 +222,7 @@ mod tests {
             .join("..")
             .join("PumAgentData")
             .join("pumagent_store.dbx");
-        
+
         let db = dbx_core::Database::open(&db_path).unwrap();
         println!("--- BRAIN ARTIFACTS ---");
         if let Ok(entries) = db.scan("brain_artifacts") {
@@ -224,4 +242,3 @@ mod tests {
         }
     }
 }
-

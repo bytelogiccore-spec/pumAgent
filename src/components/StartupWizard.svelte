@@ -13,9 +13,11 @@
   let apiKey = $state("");
 
   async function nextStep() {
-    appState.config.apiUrl = selectedPreset.url;
-    appState.config.model = selectedPreset.model;
-    appState.config.llmApiKey = apiKey;
+    if (appState.config.endpoints && appState.config.endpoints.length > 0) {
+      appState.config.endpoints[0].api_url = selectedPreset.url;
+      appState.config.endpoints[0].model = selectedPreset.model;
+      appState.config.endpoints[0].api_key = apiKey;
+    }
     appState.config.language = "en";
     appState.config.isFirstRun = false;
     await saveSettings();

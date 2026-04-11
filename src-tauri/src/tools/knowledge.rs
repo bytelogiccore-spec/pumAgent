@@ -120,27 +120,50 @@ impl KnowledgeTool {
         }
     }
 
-    pub async fn execute_action(&self, tool: String, action: String, args: serde_json::Value, llm: Option<crate::agent::llm_client::LLMClient>, registry_prompt: Option<String>) -> crate::agent::multi_agent::ToolResult {
+    pub async fn execute_action(
+        &self,
+        tool: String,
+        action: String,
+        args: serde_json::Value,
+        llm: Option<crate::agent::llm_client::LLMClient>,
+        registry_prompt: Option<String>,
+    ) -> crate::agent::multi_agent::ToolResult {
         let domain = args.get("domain").and_then(|d| d.as_str()).unwrap_or("");
         let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
 
         match action.as_str() {
             "list" => {
                 let result = self.list(domain);
-                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: result.is_ok(),
+                    output: result.unwrap_or_else(|e| e),
+                }
             }
             "read" => {
                 let result = self.read(domain, name);
-                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: result.is_ok(),
+                    output: result.unwrap_or_else(|e| e),
+                }
             }
             "write" => {
-                let mut content = args.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+                let mut content = args
+                    .get("content")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
                 if (domain == "schedules" || domain == "skills" || domain == "rules")
-                    && serde_json::from_str::<serde_json::Value>(&content).is_err() 
+                    && serde_json::from_str::<serde_json::Value>(&content).is_err()
                 {
                     if let (Some(client), Some(prompt)) = (&llm, &registry_prompt) {
-                        let now_str = chrono::Local::now().format("%Y-%m-%d %A %H:%M:%S").to_string();
+                        let now_str = chrono::Local::now()
+                            .format("%Y-%m-%d %A %H:%M:%S")
+                            .to_string();
                         let prompt_with_context = format!("{}\n\n[SYSTEM TIME ANCHOR]\nCurrent System Time: {}\n\nUser Request to convert to JSON:\n{}", prompt, now_str, content);
                         let msgs = vec![crate::agent::llm_client::ChatMessage {
                             role: "user".to_string(),
@@ -148,10 +171,13 @@ impl KnowledgeTool {
                             images_base64: None,
                         }];
                         if let Ok(res) = client.chat(&msgs, 0.1).await {
-                            let ai_text = crate::agent::orchestrator::Orchestrator::sanitize_output(&res.content);
+                            let ai_text = crate::agent::orchestrator::Orchestrator::sanitize_output(
+                                &res.content,
+                            );
                             let json_blocks = crate::agent::parser::extract_json_blocks(&ai_text);
                             if let Some(first_block) = json_blocks.first() {
-                                content = serde_json::to_string_pretty(first_block).unwrap_or(content);
+                                content =
+                                    serde_json::to_string_pretty(first_block).unwrap_or(content);
                             } else {
                                 content = ai_text;
                             }
@@ -160,13 +186,28 @@ impl KnowledgeTool {
                 }
 
                 let result = self.write(domain, name, &content);
-                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: result.is_ok(),
+                    output: result.unwrap_or_else(|e| e),
+                }
             }
             "delete" => {
                 let result = self.delete(domain, name);
-                crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: result.is_ok(), output: result.unwrap_or_else(|e| e) }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: result.is_ok(),
+                    output: result.unwrap_or_else(|e| e),
+                }
             }
-            _ => crate::agent::multi_agent::ToolResult { tool_name: tool, action, ok: false, output: "Unsupported action for knowledge".into() }
+            _ => crate::agent::multi_agent::ToolResult {
+                tool_name: tool,
+                action,
+                ok: false,
+                output: "Unsupported action for knowledge".into(),
+            },
         }
     }
 }

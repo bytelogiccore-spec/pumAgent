@@ -90,13 +90,17 @@ impl MultiAgent {
 
             let llm_clone = llm.clone();
             let registry_prompt_clone = registry_prompt.clone();
-            
+
             let handle = task::spawn(async move {
                 match tool.as_str() {
                     "crawl4ai" => crawler.execute_action(tool, action, args).await,
                     "search" => search_tool.execute_action(tool, action, args).await,
                     "brain" => brain_tool.execute_action(tool, action, args),
-                    "knowledge" => knowledge_tool.execute_action(tool, action, args, llm_clone, registry_prompt_clone).await,
+                    "knowledge" => {
+                        knowledge_tool
+                            .execute_action(tool, action, args, llm_clone, registry_prompt_clone)
+                            .await
+                    }
                     "terminal" => terminal_tool.execute_action(tool, action, args),
                     "telegram" => telegram_tool.execute_action(tool, action, args).await,
                     _ => ToolResult {

@@ -1,26 +1,23 @@
-use crate::config::AppConfig;
-use std::fs;
 use crate::agent::llm_client::{ChatMessage, LLMClient};
 use crate::agent::orchestrator::Orchestrator;
+use crate::config::AppConfig;
 use crate::state::AgentState;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 #[derive(Deserialize)]
 pub struct RunPayload {
-    api_url: String,
+    endpoints: Vec<crate::config::LlmEndpoint>,
     session_id: Option<String>,
-    llm_api_key: Option<String>,
-    model: String,
-    cloud_api_url: String,
-    cloud_model: String,
-    cloud_llm_api_key: Option<String>,
-    cloud_routing_planner: bool,
-    cloud_routing_critic: bool,
-    cloud_routing_writer: bool,
-    cloud_routing_worker: bool,
+    planner_endpoint_id: String,
+    critic_endpoint_id: String,
+    writer_endpoint_id: String,
+    worker_endpoint_id: String,
+    reflector_endpoint_id: String,
+    registry_endpoint_id: String,
     system_prompt: String,
     planner_prompt: Option<String>,
     critic_prompt: Option<String>,
@@ -60,41 +57,21 @@ pub async fn execute_agent_tools(
     state.cancel_flag.store(false, Ordering::Relaxed);
 
     let _ = tx
-        .send(format!(
-            "[시스템] {} 모델로 접속을 시도합니다...",
-            payload.model
-        ))
+        .send("[시스템] 워커 및 각 역할별 엔드포인트 연결을 준비합니다...".to_string())
         .await;
 
-    // Orchestrator needs LLM + MultiAgent + base_dir
-    let llm_key = payload.llm_api_key.clone().unwrap_or_default();
-    let local_llm = LLMClient::new(
-        payload.api_url.clone(),
-        payload.model.clone(),
-        llm_key.clone(),
-    );
-    let cloud_key = payload.cloud_llm_api_key.clone().unwrap_or_default();
-    let cloud_llm = if payload.cloud_api_url.is_empty() {
-        local_llm.clone()
-    } else {
-        LLMClient::new(
-            payload.cloud_api_url.clone(),
-            payload.cloud_model.clone(),
-            cloud_key,
-        )
-    };
-
-    let routing_flags = crate::agent::orchestrator::CloudRoutingFlags {
-        planner: payload.cloud_routing_planner,
-        critic: payload.cloud_routing_critic,
-        writer: payload.cloud_routing_writer,
-        worker: payload.cloud_routing_worker,
+    let orchestrator_routing = crate::agent::orchestrator::OrchestratorRouting {
+        endpoints: payload.endpoints.clone(),
+        planner_id: payload.planner_endpoint_id.clone(),
+        critic_id: payload.critic_endpoint_id.clone(),
+        writer_id: payload.writer_endpoint_id.clone(),
+        worker_id: payload.worker_endpoint_id.clone(),
+        reflector_id: payload.reflector_endpoint_id.clone(),
+        registry_id: payload.registry_endpoint_id.clone(),
     };
 
     let orchestrator = Orchestrator::new(
-        local_llm,
-        cloud_llm,
-        routing_flags,
+        orchestrator_routing,
         Arc::clone(&state.multi_agent),
         state.base_dir.clone(),
         state.db.clone(),
@@ -135,23 +112,17 @@ pub async fn execute_agent_tools(
         if let Some(reflector_prompt) = payload.reflector_prompt {
             let log_tx = tx.clone();
             // Clone orchestrator state so it can be moved into the async block
-            let local_llm = LLMClient::new(payload.api_url, payload.model, llm_key.clone());
-            let cloud_key = payload.cloud_llm_api_key.clone().unwrap_or_default();
-            let cloud_llm = if payload.cloud_api_url.is_empty() {
-                local_llm.clone()
-            } else {
-                LLMClient::new(payload.cloud_api_url, payload.cloud_model, cloud_key)
-            };
-            let routing_flags = crate::agent::orchestrator::CloudRoutingFlags {
-                planner: payload.cloud_routing_planner,
-                critic: payload.cloud_routing_critic,
-                writer: payload.cloud_routing_writer,
-                worker: payload.cloud_routing_worker,
+            let bg_routing = crate::agent::orchestrator::OrchestratorRouting {
+                endpoints: payload.endpoints.clone(),
+                planner_id: payload.planner_endpoint_id.clone(),
+                critic_id: payload.critic_endpoint_id.clone(),
+                writer_id: payload.writer_endpoint_id.clone(),
+                worker_id: payload.worker_endpoint_id.clone(),
+                reflector_id: payload.reflector_endpoint_id.clone(),
+                registry_id: payload.registry_endpoint_id.clone(),
             };
             let bg_orchestrator = Orchestrator::new(
-                local_llm,
-                cloud_llm,
-                routing_flags,
+                bg_routing,
                 Arc::clone(&state.multi_agent),
                 state.base_dir.clone(),
                 state.db.clone(),
@@ -172,17 +143,14 @@ pub async fn execute_agent_tools(
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub struct BackgroundPayload {
-    api_url: String,
+    endpoints: Vec<crate::config::LlmEndpoint>,
     session_id: Option<String>,
-    llm_api_key: Option<String>,
-    model: String,
-    cloud_api_url: String,
-    cloud_model: String,
-    cloud_llm_api_key: Option<String>,
-    cloud_routing_planner: bool,
-    cloud_routing_critic: bool,
-    cloud_routing_writer: bool,
-    cloud_routing_worker: bool,
+    planner_endpoint_id: String,
+    critic_endpoint_id: String,
+    writer_endpoint_id: String,
+    worker_endpoint_id: String,
+    reflector_endpoint_id: String,
+    registry_endpoint_id: String,
     system_prompt: String,
     planner_prompt: Option<String>,
     critic_prompt: Option<String>,
@@ -208,13 +176,14 @@ pub async fn execute_background_scheduler(
         return Ok("No tasks".to_string());
     }
 
-    let llm_key = payload.llm_api_key.clone().unwrap_or_default();
-    let local_llm = LLMClient::new(payload.api_url, payload.model, llm_key.clone());
-    let cloud_key = payload.cloud_llm_api_key.clone().unwrap_or_default();
-    let cloud_llm = if payload.cloud_api_url.is_empty() {
-        local_llm.clone()
-    } else {
-        LLMClient::new(payload.cloud_api_url, payload.cloud_model, cloud_key)
+    let bg_routing = crate::agent::orchestrator::OrchestratorRouting {
+        endpoints: payload.endpoints.clone(),
+        planner_id: payload.planner_endpoint_id.clone(),
+        critic_id: payload.critic_endpoint_id.clone(),
+        writer_id: payload.writer_endpoint_id.clone(),
+        worker_id: payload.worker_endpoint_id.clone(),
+        reflector_id: payload.reflector_endpoint_id.clone(),
+        registry_id: payload.registry_endpoint_id.clone(),
     };
 
     let multi_agent = Arc::clone(&state.multi_agent);
@@ -241,15 +210,8 @@ pub async fn execute_background_scheduler(
         }
     });
 
-    let routing_flags = crate::agent::orchestrator::CloudRoutingFlags {
-        planner: payload.cloud_routing_planner,
-        critic: payload.cloud_routing_critic,
-        writer: payload.cloud_routing_writer,
-        worker: payload.cloud_routing_worker,
-    };
-
     tokio::spawn(async move {
-        let orchestrator = Orchestrator::new(local_llm, cloud_llm, routing_flags, multi_agent, base_dir, db);
+        let orchestrator = Orchestrator::new(bg_routing, multi_agent, base_dir, db);
         let _ = orchestrator
             .run_loop(
                 session_id,
@@ -273,16 +235,26 @@ pub async fn execute_background_scheduler(
 
 #[derive(Deserialize)]
 pub struct CompressPayload {
-    api_url: String,
-    llm_api_key: Option<String>,
-    model: String,
+    endpoints: Vec<crate::config::LlmEndpoint>,
     messages: Vec<ChatMessage>,
 }
 
 #[tauri::command]
 pub async fn compress_memory(payload: CompressPayload) -> Result<String, String> {
-    let llm_key = payload.llm_api_key.clone().unwrap_or_default();
-    let llm = LLMClient::new(payload.api_url, payload.model, llm_key);
+    let endpoint =
+        payload
+            .endpoints
+            .first()
+            .cloned()
+            .unwrap_or_else(|| crate::config::LlmEndpoint {
+                id: "default".to_string(),
+                name: "default".to_string(),
+                api_url: "http://127.0.0.1:8000/v1/chat/completions".to_string(),
+                model: "gemma-4".to_string(),
+                api_key: "".to_string(),
+                is_enabled: true,
+            });
+    let llm = LLMClient::new(endpoint.api_url, endpoint.model, endpoint.api_key);
     let system_msg = ChatMessage {
         role: "system".to_string(),
         content: "제공된 과거의 대화 및 사고 내역을 짧고 명료하게 요약해라. 핵심적인 사실, 유저의 요청 사항, 수집된 주요 정보 및 앞으로 진행해야 할 남은 계획 위주로 압축할 것. 불필요한 인사말이나 서론 없이 압축된 컨텍스트만 한국어로 반환할 것.".to_string(),
@@ -331,8 +303,6 @@ pub fn save_config(config: AppConfig, state: State<'_, AgentState>) -> Result<()
     Ok(())
 }
 
-
-
 #[tauri::command]
 pub fn flush_db(state: State<'_, AgentState>) -> Result<(), String> {
     state.db.flush().map_err(|e| e.to_string())
@@ -344,8 +314,24 @@ pub async fn translate_i18n(
     state: State<'_, AgentState>,
 ) -> Result<String, String> {
     let config = AppConfig::load(&state.base_dir);
-    let llm =
-        crate::agent::llm_client::LLMClient::new(config.api_url, config.model, config.llm_api_key);
+    let endpoint =
+        config
+            .endpoints
+            .first()
+            .cloned()
+            .unwrap_or_else(|| crate::config::LlmEndpoint {
+                id: "default".to_string(),
+                name: "default".to_string(),
+                api_url: "http://127.0.0.1:8000/v1/chat/completions".to_string(),
+                model: "gemma-4".to_string(),
+                api_key: "".to_string(),
+                is_enabled: true,
+            });
+    let llm = crate::agent::llm_client::LLMClient::new(
+        endpoint.api_url,
+        endpoint.model,
+        endpoint.api_key,
+    );
 
     let en_content = match state.db.get("knowledge_base", b"locales:en.json") {
         Ok(Some(bytes)) => String::from_utf8(bytes).unwrap_or_default(),
