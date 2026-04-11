@@ -17,7 +17,7 @@ pub struct KbQuotaResult {
     pub skills: QuotaUsage,
     pub workflows: QuotaUsage,
 }
-use tauri::State;
+
 
 #[tauri::command]
 pub fn list_logs(state: State<'_, AgentState>) -> Result<Vec<String>, String> {
@@ -67,19 +67,6 @@ pub fn list_knowledge(domain: String, state: State<'_, AgentState>) -> Result<Ve
     Ok(files)
 }
 
-#[derive(Serialize)]
-pub struct QuotaUsage {
-    pub count: u32,
-    pub approx_tokens: u32,
-    pub limit: u32,
-}
-
-#[derive(Serialize)]
-pub struct KbQuotaResult {
-    pub rules: QuotaUsage,
-    pub skills: QuotaUsage,
-    pub workflows: QuotaUsage,
-}
 
 #[tauri::command]
 pub fn get_knowledge_quota(state: State<'_, AgentState>) -> Result<KbQuotaResult, String> {
