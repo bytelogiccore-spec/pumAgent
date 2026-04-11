@@ -43,7 +43,12 @@ impl KnowledgeTool {
         if files.is_empty() {
             return Ok(format!("No items found in {}.", domain));
         }
-        Ok(files.join("\n"))
+        
+        let mut output = format!("Found {} items in {}:\n", files.len(), domain);
+        for file in files {
+            output.push_str(&format!("- {}\n", file));
+        }
+        Ok(output)
     }
 
     pub fn read(&self, domain: &str, name: &str) -> Result<String, String> {
