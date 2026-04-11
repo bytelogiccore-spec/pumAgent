@@ -70,41 +70,8 @@
   {#if isCustomLanguage}
     <div style="margin-top: 12px; display:flex; gap: 8px; align-items:center;">
       <input type="text" bind:value={customLangInput} placeholder={t("settings.lang_ph")} style="flex:1;" />
-      <button class="sys-badge" onclick={generateCustomLang} disabled={isTranslating} style="background: #1a1a1a; color: white; display: flex; align-items: center; justify-content: center; gap: 8px;">
-        {#if isTranslating}
-          <svg class="brain-loader" viewBox="0 0 100 100" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <!-- Hexagon -->
-            <path class="brain-line" d="M 50 5 L 85 25 L 85 69 L 50 89 L 15 69 L 15 25 Z" />
-            <circle class="brain-line" cx="50" cy="5" r="3" />
-            <circle class="brain-line" cx="85" cy="25" r="3" />
-            <circle class="brain-line" cx="85" cy="69" r="3" />
-            <circle class="brain-line" cx="50" cy="89" r="3" />
-            <circle class="brain-line" cx="15" cy="69" r="3" />
-            <circle class="brain-line" cx="15" cy="25" r="3" />
-            <!-- Connectors -->
-            <path class="brain-line" d="M 50 8 L 50 22" />
-            <path class="brain-line" d="M 50 86 L 50 72" />
-            <path class="brain-line" d="M 82 27 L 67 34" />
-            <path class="brain-line" d="M 82 67 L 66 65" />
-            <path class="brain-line" d="M 18 27 L 33 34" />
-            <path class="brain-line" d="M 18 67 L 34 65" />
-            <!-- Fissure -->
-            <path class="brain-line" d="M 50 22 L 50 72" />
-            <!-- Right Hemisphere -->
-            <path class="brain-line" d="M 50 22 C 58 18, 68 25, 67 34 C 76 34, 78 45, 69 49 C 76 53, 76 65, 66 65 C 67 72, 58 75, 50 72" />
-            <path class="brain-line" d="M 54 32 C 60 33, 64 38, 62 43" />
-            <path class="brain-line" d="M 54 45 C 61 42, 66 50, 64 60" />
-            <path class="brain-line" d="M 52 57 C 57 56, 60 60, 58 68" />
-            <!-- Left Hemisphere -->
-            <path class="brain-line" d="M 50 22 C 42 18, 32 25, 33 34 C 24 34, 22 45, 31 49 C 24 53, 24 65, 34 65 C 33 72, 42 75, 50 72" />
-            <path class="brain-line" d="M 46 32 C 40 33, 36 38, 38 43" />
-            <path class="brain-line" d="M 46 45 C 39 42, 34 50, 36 60" />
-            <path class="brain-line" d="M 48 57 C 43 56, 40 60, 42 68" />
-          </svg>
-          {t("settings.translating")}
-        {:else}
-          {t("settings.trans_apply")}
-        {/if}
+      <button class="sys-badge" onclick={generateCustomLang} disabled={isTranslating} style="background: #1a1a1a; color: white;">
+        {isTranslating ? t("settings.translating") : t("settings.trans_apply")}
       </button>
     </div>
   {/if}
@@ -192,7 +159,63 @@
 </div>
 {/if}
 
+{#if isTranslating}
+  <div class="blur-overlay">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 24px;">
+      <svg class="brain-loader mega" viewBox="0 0 100 100" width="160" height="160" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Hexagon -->
+        <path class="brain-line" d="M 50 5 L 85 25 L 85 69 L 50 89 L 15 69 L 15 25 Z" />
+        <circle class="brain-line" cx="50" cy="5" r="3" />
+        <circle class="brain-line" cx="85" cy="25" r="3" />
+        <circle class="brain-line" cx="85" cy="69" r="3" />
+        <circle class="brain-line" cx="50" cy="89" r="3" />
+        <circle class="brain-line" cx="15" cy="69" r="3" />
+        <circle class="brain-line" cx="15" cy="25" r="3" />
+        <!-- Connectors -->
+        <path class="brain-line" d="M 50 8 L 50 22" />
+        <path class="brain-line" d="M 50 86 L 50 72" />
+        <path class="brain-line" d="M 82 27 L 67 34" />
+        <path class="brain-line" d="M 82 67 L 66 65" />
+        <path class="brain-line" d="M 18 27 L 33 34" />
+        <path class="brain-line" d="M 18 67 L 34 65" />
+        <!-- Fissure -->
+        <path class="brain-line" d="M 50 22 L 50 72" />
+        <!-- Right Hemisphere -->
+        <path class="brain-line" d="M 50 22 C 58 18, 68 25, 67 34 C 76 34, 78 45, 69 49 C 76 53, 76 65, 66 65 C 67 72, 58 75, 50 72" />
+        <path class="brain-line" d="M 54 32 C 60 33, 64 38, 62 43" />
+        <path class="brain-line" d="M 54 45 C 61 42, 66 50, 64 60" />
+        <path class="brain-line" d="M 52 57 C 57 56, 60 60, 58 68" />
+        <!-- Left Hemisphere -->
+        <path class="brain-line" d="M 50 22 C 42 18, 32 25, 33 34 C 24 34, 22 45, 31 49 C 24 53, 24 65, 34 65 C 33 72, 42 75, 50 72" />
+        <path class="brain-line" d="M 46 32 C 40 33, 36 38, 38 43" />
+        <path class="brain-line" d="M 46 45 C 39 42, 34 50, 36 60" />
+        <path class="brain-line" d="M 48 57 C 43 56, 40 60, 42 68" />
+      </svg>
+      <div style="font-size: 1.25rem; font-weight: 700; color: #7df9ff; letter-spacing: 0.1em; text-transform: uppercase;">
+        {t("settings.translating")}
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
+  .blur-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(16px);
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #7df9ff;
+  }
+  .brain-loader.mega {
+    filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.6)) drop-shadow(0 0 16px rgba(0, 255, 255, 0.3));
+  }
   .form-group label {
     color: #a1a1aa;
     font-weight: 600;
