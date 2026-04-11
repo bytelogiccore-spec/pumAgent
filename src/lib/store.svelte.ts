@@ -66,6 +66,7 @@ export const appState = $state({
     telegramBotToken: "",
     telegramChatId: "",
   },
+  kbQuota: null as any,
   sysModalOpen: false,
   sysModalTitle: "",
   sysModalItems: [] as { name: string; content: string | null }[],

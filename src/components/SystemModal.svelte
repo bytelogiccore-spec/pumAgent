@@ -41,6 +41,34 @@
         <div style="font-size: 0.8rem; color: #a1a1aa; font-weight: bold; margin-top: 16px; margin-bottom: 4px;">{t("nav.label.data")}</div>
         <button class="sys-link" class:active={appState.sysModalDomain === "brain"} onclick={() => interceptSlashCommand("/brain")}>{t("nav.brain")}</button>
         <button class="sys-link" class:active={appState.sysModalDomain === "logs"} onclick={() => interceptSlashCommand("/logs")}>{t("nav.logs")}</button>
+
+        {#if appState.kbQuota}
+        <div style="margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="font-size: 0.75rem; color: #a1a1aa; font-weight: bold; text-transform: uppercase;">Context Quota</div>
+          
+          <!-- Rules Quota -->
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #d4d4d8;">
+              <span>Rules</span>
+              <span>{appState.kbQuota.rules.approx_tokens} / {appState.kbQuota.rules.limit}</span>
+            </div>
+            <div style="height: 4px; background: #27272a; border-radius: 2px; overflow: hidden;">
+              <div style="height: 100%; background: {appState.kbQuota.rules.approx_tokens > appState.kbQuota.rules.limit * 0.8 ? '#e0005a' : '#0ea5e9'}; width: {Math.min(100, Math.max(0, (appState.kbQuota.rules.approx_tokens / appState.kbQuota.rules.limit) * 100))}%;"></div>
+            </div>
+          </div>
+
+          <!-- Skills Quota -->
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #d4d4d8;">
+              <span>Skills & Flow</span>
+              <span>{(appState.kbQuota.skills.approx_tokens + appState.kbQuota.workflows.approx_tokens)} / {appState.kbQuota.skills.limit}</span>
+            </div>
+            <div style="height: 4px; background: #27272a; border-radius: 2px; overflow: hidden;">
+              <div style="height: 100%; background: {(appState.kbQuota.skills.approx_tokens + appState.kbQuota.workflows.approx_tokens) > appState.kbQuota.skills.limit * 0.8 ? '#e0005a' : '#10b981'}; width: {Math.min(100, Math.max(0, ((appState.kbQuota.skills.approx_tokens + appState.kbQuota.workflows.approx_tokens) / appState.kbQuota.skills.limit) * 100))}%;"></div>
+            </div>
+          </div>
+        </div>
+        {/if}
       </div>
 
       <!-- 2. 우측 콘텐츠 영역 -->

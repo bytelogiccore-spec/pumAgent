@@ -15,6 +15,7 @@ export async function interceptSlashCommand(cmd: string): Promise<boolean> {
     appState.viewingItemName = null;
     appState.showSysSidebar = false;
     appState.selectedLogs = [];
+    refreshKbQuota();
     return true;
   }
 
@@ -32,6 +33,7 @@ export async function interceptSlashCommand(cmd: string): Promise<boolean> {
     appState.viewingItemName = null;
     appState.showSysSidebar = true;
     appState.selectedLogs = [];
+    refreshKbQuota();
     return true;
   }
 
@@ -65,10 +67,19 @@ export async function interceptSlashCommand(cmd: string): Promise<boolean> {
     appState.viewingItemContent = null;
     appState.viewingItemName = null;
     appState.showSysSidebar = true;
+    refreshKbQuota();
     return true;
   }
 
   return false;
+}
+
+export async function refreshKbQuota() {
+  try {
+    appState.kbQuota = await invoke("get_knowledge_quota");
+  } catch (e) {
+    console.warn("Failed to fetch KB quota", e);
+  }
 }
 
 export async function loadSysItem(name: string) {
@@ -104,6 +115,7 @@ export async function deleteSysItem(name: string) {
       appState.viewingItemContent = null;
       appState.viewingItemName = null;
     }
+    refreshKbQuota();
     addLog(t("sys.del_done", { name }));
   } catch (e) {
     showError(`Delete failed: ${e}`);
@@ -142,6 +154,7 @@ export async function saveSysItem() {
         content: appState.viewingItemContent || "",
       });
     }
+    refreshKbQuota();
     addLog(t("sys.save_done", { name: appState.viewingItemName }));
     alert(t("sys.save_success"));
   } catch (e) {

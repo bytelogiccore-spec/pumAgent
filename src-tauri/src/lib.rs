@@ -264,6 +264,7 @@ pub fn run() {
             commands::fs::read_knowledge,
             commands::fs::write_knowledge,
             commands::fs::delete_knowledge,
+            commands::fs::get_knowledge_quota,
             commands::agent::flush_db,
             commands::agent::translate_i18n,
             commands::agent::stop_agent

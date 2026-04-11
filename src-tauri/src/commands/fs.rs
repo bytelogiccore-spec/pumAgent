@@ -1,5 +1,21 @@
 use crate::AgentState;
+use serde::Serialize;
 use std::fs;
+use tauri::State;
+
+#[derive(Serialize)]
+pub struct QuotaUsage {
+    pub count: u32,
+    pub approx_tokens: u32,
+    pub limit: u32,
+}
+
+#[derive(Serialize)]
+pub struct KbQuotaResult {
+    pub rules: QuotaUsage,
+    pub skills: QuotaUsage,
+    pub workflows: QuotaUsage,
+}
 use tauri::State;
 
 #[tauri::command]
@@ -50,6 +66,50 @@ pub fn list_knowledge(domain: String, state: State<'_, AgentState>) -> Result<Ve
     Ok(files)
 }
 
+#[derive(Serialize)]
+pub struct QuotaUsage {
+    pub count: u32,
+    pub approx_tokens: u32,
+    pub limit: u32,
+}
+
+#[derive(Serialize)]
+pub struct KbQuotaResult {
+    pub rules: QuotaUsage,
+    pub skills: QuotaUsage,
+    pub workflows: QuotaUsage,
+}
+
+#[tauri::command]
+pub fn get_knowledge_quota(state: State<'_, AgentState>) -> Result<KbQuotaResult, String> {
+    let mut rules = QuotaUsage { count: 0, approx_tokens: 0, limit: 1200 };
+    let mut skills = QuotaUsage { count: 0, approx_tokens: 0, limit: 8000 };
+    let mut workflows = QuotaUsage { count: 0, approx_tokens: 0, limit: 8000 };
+
+    if let Ok(entries) = state.db.scan("knowledge_base") {
+        for (key, val) in entries {
+            if val != b"__PUM_DELETED__" {
+                if let Ok(name) = String::from_utf8(key) {
+                    let content_str = String::from_utf8_lossy(&val);
+                    let tokens = (content_str.chars().count() as f64 * 1.5) as u32;
+
+                    if name.starts_with("rules:") {
+                        rules.count += 1;
+                        rules.approx_tokens += tokens;
+                    } else if name.starts_with("skills:") {
+                        skills.count += 1;
+                        skills.approx_tokens += tokens;
+                    } else if name.starts_with("workflows:") {
+                        workflows.count += 1;
+                        workflows.approx_tokens += tokens;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(KbQuotaResult { rules, skills, workflows })
+}
 #[tauri::command]
 pub fn read_knowledge(
     domain: String,
