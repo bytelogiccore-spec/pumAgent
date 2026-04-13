@@ -7,3 +7,4 @@ pub mod terminal;
 pub mod http_tool;
 pub mod scripting_tool;
 pub mod moltbook_tool;
+pub mod vault_tool;
