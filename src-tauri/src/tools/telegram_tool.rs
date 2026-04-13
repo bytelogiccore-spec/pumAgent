@@ -31,16 +31,22 @@ impl TelegramTool {
         let bot = Bot::new(config.telegram_bot_token.clone());
         let chat_id = ChatId(config.telegram_chat_id.parse::<i64>().unwrap_or_default());
 
+        let think_re = regex::Regex::new(r"(?i)<think>[\s\S]*?</think>").unwrap();
+        let clean_text_no_think = think_re.replace_all(message, "").to_string();
+
         let re = regex::Regex::new(r"```mermaid(?:\r?\n)([\s\S]*?)```").unwrap();
         let mut diagrams = Vec::new();
-        for cap in re.captures_iter(message) {
+        for cap in re.captures_iter(&clean_text_no_think) {
             if let Some(code) = cap.get(1) {
                 diagrams.push(code.as_str().to_string());
             }
         }
         let clean_text = re
-            .replace_all(message, "🎨 [Mermaid Diagram Attached]")
+            .replace_all(&clean_text_no_think, "🎨 [Mermaid Diagram Attached]")
             .to_string();
+
+        // Final cleanup of extra whitespace/newlines
+        let clean_text = clean_text.trim().to_string();
 
         let mut final_status = "Telegram message sent successfully.".to_string();
 

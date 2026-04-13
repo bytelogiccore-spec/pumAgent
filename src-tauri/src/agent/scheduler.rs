@@ -35,7 +35,7 @@ impl ScheduleConfig {
                 };
                 return next_exec;
             } else {
-                return "Cron Syntax Error".to_string();
+                return "Cron Syntax Error (6-7 fields req.)".to_string();
             }
         }
 

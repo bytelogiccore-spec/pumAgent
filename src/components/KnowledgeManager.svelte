@@ -163,11 +163,13 @@
           <button class="sys-save-btn" onclick={() => { appState.viewingItemName = null; appState.viewingItemContent = null; }} style="background:transparent; color:#1a1a1a; border:1px solid #1a1a1a; padding: 4px 12px; text-transform:none;">← Back</button>
           <div style="font-weight:600;">{appState.viewingItemName}</div>
         </div>
-        {#if ["skills", "rules", "workflows", "brain", "logs"].includes(appState.sysModalDomain)}
+        {#if ["skills", "rules", "workflows", "brain", "logs", "schedules", "vault"].includes(appState.sysModalDomain)}
           <div style="display: flex; gap: 8px;">
-            <button class="sys-save-btn" style="background:#0284c7;" onclick={handleSummarize} disabled={summarizing}>
-              {summarizing ? "Summarizing..." : "✨ AI 요약"}
-            </button>
+            {#if ["skills", "rules", "workflows", "brain", "logs"].includes(appState.sysModalDomain)}
+              <button class="sys-save-btn" style="background:#0284c7;" onclick={handleSummarize} disabled={summarizing}>
+                {summarizing ? "Summarizing..." : "✨ AI 요약"}
+              </button>
+            {/if}
             {#if appState.sysModalDomain !== "logs"}
               <button class="sys-save-btn" onclick={saveSysItem}>{t("knowledge.save")}</button>
             {/if}
