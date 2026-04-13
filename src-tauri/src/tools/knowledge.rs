@@ -137,7 +137,11 @@ impl KnowledgeTool {
         llm: Option<crate::agent::llm_client::LLMClient>,
         registry_prompt: Option<String>,
     ) -> crate::agent::multi_agent::ToolResult {
-        let domain = args.get("domain").and_then(|d| d.as_str()).unwrap_or("").to_lowercase();
+        let domain = args
+            .get("domain")
+            .and_then(|d| d.as_str())
+            .unwrap_or("")
+            .to_lowercase();
         let domain_str = domain.as_str();
         let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
 

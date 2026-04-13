@@ -209,7 +209,7 @@ impl Orchestrator {
                 clean = clean["thought ".len()..].to_string();
             }
         }
-        
+
         while let Some(start) = clean.find("<|tool_call>") {
             if let Some(end) = clean.find("<tool_call|>") {
                 let block = &clean[start..end + "<tool_call|>".len()];

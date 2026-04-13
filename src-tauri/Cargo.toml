@@ -38,7 +38,7 @@ urlencoding = "2.1.3"
 rand = "0.8.5"
 teloxide = { version = "0.13.0", features = ["macros"] }
 cron = "0.16.0"
-dbx-core = "0.2.1-beta"
+dbx-core = "0.2.2"
 regex = "1.12.3"
 base64 = "0.22.1"
 flate2 = "1.1.9"

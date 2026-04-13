@@ -550,3 +550,8 @@ pub async fn delete_vault_secret(state: State<'_, AgentState>, key: String) -> R
     let vault = crate::tools::vault_tool::VaultTool::new(state.base_dir.clone());
     vault.delete_secret(&key)
 }
+
+#[tauri::command]
+pub fn get_next_execution_time(config: crate::agent::scheduler::ScheduleConfig) -> String {
+    config.get_next_run_time(chrono::Utc::now())
+}

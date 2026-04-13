@@ -19,6 +19,74 @@ pub struct ScheduleConfig {
     pub end_date: Option<String>,
 }
 
+impl ScheduleConfig {
+    pub fn get_next_run_time(&self, now: DateTime<Utc>) -> String {
+        let last_run_dt = self
+            .last_run
+            .as_ref()
+            .and_then(|s| s.parse::<DateTime<Utc>>().ok());
+
+        if let Some(cron_expr) = &self.cron_expression {
+            if let Ok(cron) = cron::Schedule::from_str(cron_expr) {
+                let next_exec = if let Some(next_upcoming) = cron.upcoming(Local).next() {
+                    format!("{} (Cron)", next_upcoming.format("%Y-%m-%d %H:%M:%S"))
+                } else {
+                    "No upcoming runs".to_string()
+                };
+                return next_exec;
+            } else {
+                return "Cron Syntax Error".to_string();
+            }
+        }
+
+        if let Some(interval) = self.interval_seconds {
+            let next_dt = if let Some(last) = last_run_dt {
+                last + chrono::Duration::seconds(interval as i64)
+            } else {
+                now + chrono::Duration::seconds(interval as i64)
+            };
+
+            return next_dt
+                .with_timezone(&Local)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string();
+        }
+
+        "Not set".to_string()
+    }
+
+    pub fn should_run_now(&self, now: DateTime<Utc>) -> bool {
+        let last_run_dt = self
+            .last_run
+            .as_ref()
+            .and_then(|s| s.parse::<DateTime<Utc>>().ok());
+
+        if let Some(cron_expr) = &self.cron_expression {
+            if let Ok(cron) = cron::Schedule::from_str(cron_expr) {
+                if let Some(last) = last_run_dt {
+                    if let Some(target) = cron.after(&last).next() {
+                        return now >= target;
+                    }
+                } else {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if let Some(interval) = self.interval_seconds {
+            if let Some(last) = last_run_dt {
+                let diff = (now - last).num_seconds();
+                return diff >= interval as i64;
+            } else {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
 pub struct Scheduler {
     db: Arc<Database>,
 }
@@ -58,11 +126,6 @@ impl Scheduler {
                                 let mut should_run = false;
                                 let mut next_exec = "Unknown".to_string();
 
-                                let last_run_dt = sched
-                                    .last_run
-                                    .as_ref()
-                                    .and_then(|s| s.parse::<DateTime<Utc>>().ok());
-
                                 let mut is_expired = false;
                                 if let Some(end_str) = &sched.end_date {
                                     if let Ok(end_dt) = end_str.parse::<DateTime<Utc>>() {
@@ -75,49 +138,8 @@ impl Scheduler {
 
                                 // Check Cron & Interval
                                 if !is_expired {
-                                    if let Some(cron_expr) = &sched.cron_expression {
-                                        if let Ok(cron) = cron::Schedule::from_str(cron_expr) {
-                                            if let Some(last) = last_run_dt {
-                                                if let Some(target) = cron.after(&last).next() {
-                                                    if now >= target {
-                                                        should_run = true;
-                                                    }
-                                                }
-                                            } else {
-                                                should_run = true; // Run immediately to set baseline
-                                            }
-                                            if let Some(next_upcoming) = cron.upcoming(Local).next()
-                                            {
-                                                next_exec = format!(
-                                                    "{} (Cron)",
-                                                    next_upcoming.format("%Y-%m-%d %H:%M:%S")
-                                                );
-                                            }
-                                        } else {
-                                            next_exec = "Cron Syntax Error".to_string();
-                                        }
-                                    } else if let Some(interval) = sched.interval_seconds {
-                                        if let Some(last) = last_run_dt {
-                                            let diff = (now - last).num_seconds();
-                                            if diff >= interval as i64 {
-                                                should_run = true;
-                                            }
-                                            let next =
-                                                last + chrono::Duration::seconds(interval as i64);
-                                            next_exec = next
-                                                .with_timezone(&Local)
-                                                .format("%Y-%m-%d %H:%M:%S")
-                                                .to_string();
-                                        } else {
-                                            should_run = true;
-                                            let next =
-                                                now + chrono::Duration::seconds(interval as i64);
-                                            next_exec = next
-                                                .with_timezone(&Local)
-                                                .format("%Y-%m-%d %H:%M:%S")
-                                                .to_string();
-                                        }
-                                    }
+                                    should_run = sched.should_run_now(now);
+                                    next_exec = sched.get_next_run_time(now);
                                 }
 
                                 schedules_summary.push_str(&format!(

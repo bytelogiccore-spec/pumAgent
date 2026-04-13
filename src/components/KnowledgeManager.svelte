@@ -12,8 +12,11 @@
   } from "../lib/store.svelte";
   import { t } from "../lib/i18n.svelte";
   import { untrack } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
 
   let scheduleData: any = $state(null);
+  let scheduleType: "interval" | "cron" = $state("interval");
+  let nextExecutionText: string = $state("");
   
   $effect(() => {
     let domain = appState.sysModalDomain;
@@ -26,7 +29,9 @@
           if (content) {
               let currentStr = scheduleData ? JSON.stringify(scheduleData, null, 2) : "";
               if (content !== currentStr) {
-                  scheduleData = JSON.parse(content);
+                  const parsed = JSON.parse(content);
+                  scheduleData = parsed;
+                  scheduleType = parsed.cron_expression ? "cron" : "interval";
               }
           }
         } catch (e) {
@@ -47,16 +52,28 @@
     }
   }
 
-  let nextExecutionText = $derived.by(() => {
-    if (!scheduleData) return t("knowledge.sched_not_set");
-    if (scheduleData.cron_expression && scheduleData.cron_expression.trim() !== "") {
-        return t("knowledge.sched_cron_set", { cron: scheduleData.cron_expression });
+  function handleTypeChange(e: any) {
+    scheduleType = e.target.value;
+    if (scheduleType === "interval") {
+        scheduleData.cron_expression = null;
+        if (!scheduleData.interval_seconds) scheduleData.interval_seconds = 3600;
+    } else {
+        scheduleData.interval_seconds = null;
+        if (!scheduleData.cron_expression) scheduleData.cron_expression = "0 0 * * * *";
     }
-    if (!scheduleData.interval_seconds) return t("knowledge.sched_not_set");
-    let baseTime = scheduleData.last_run ? new Date(scheduleData.last_run) : new Date();
-    let nextTime = new Date(baseTime.getTime() + scheduleData.interval_seconds * 1000);
-    return t("knowledge.sched_next", { time: nextTime.toLocaleString(appState.config.language === "ko" ? "ko-KR" : "en-US", { dateStyle: "long", timeStyle: "medium" }) });
+    syncScheduleData();
+  }
+
+  $effect(() => {
+    if (scheduleData && appState.sysModalDomain === "schedules") {
+        invoke("get_next_execution_time", { config: scheduleData }).then((res: any) => {
+            nextExecutionText = res;
+        }).catch(() => {
+            nextExecutionText = "Invalid Configuration";
+        });
+    }
   });
+
 </script>
 
 <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fcfbf8; height: 100%;">
@@ -137,13 +154,23 @@
           </div>
           <div style="display: flex; gap: 16px;">
             <div class="form-group" style="flex: 1;">
-              <label for="schedInterval">{t("knowledge.label_interval")}</label>
-              <input id="schedInterval" type="number" bind:value={scheduleData.interval_seconds} oninput={syncScheduleData} placeholder={t("knowledge.ph_interval")} />
+              <label for="schedType">{t("knowledge.label_sched_type") || "Schedule Type"}</label>
+              <select id="schedType" value={scheduleType} onchange={handleTypeChange} style="padding: 10px; border-radius:4px; border:1px solid #ccc; background:#fff;">
+                <option value="interval">Interval (Seconds)</option>
+                <option value="cron">Cron Expression</option>
+              </select>
             </div>
-            <div class="form-group" style="flex: 1;">
-              <label for="schedCron">{t("knowledge.label_cron")}</label>
-              <input id="schedCron" type="text" bind:value={scheduleData.cron_expression} oninput={syncScheduleData} placeholder={t("knowledge.ph_cron")} />
-            </div>
+            {#if scheduleType === "interval"}
+              <div class="form-group" style="flex: 1;">
+                <label for="schedInterval">{t("knowledge.label_interval")}</label>
+                <input id="schedInterval" type="number" bind:value={scheduleData.interval_seconds} oninput={syncScheduleData} placeholder={t("knowledge.ph_interval")} />
+              </div>
+            {:else}
+              <div class="form-group" style="flex: 1;">
+                <label for="schedCron">{t("knowledge.label_cron")}</label>
+                <input id="schedCron" type="text" bind:value={scheduleData.cron_expression} oninput={syncScheduleData} placeholder={t("knowledge.ph_cron")} />
+              </div>
+            {/if}
             <div class="form-group" style="flex: 1;">
               <label for="schedEndDate">{t("knowledge.label_end")}</label>
               <input id="schedEndDate" type="text" bind:value={scheduleData.end_date} oninput={syncScheduleData} placeholder={t("knowledge.ph_end")} />
@@ -209,22 +236,7 @@
   .list-item-card:active {
     transform: scale(0.98);
   }
-  .sys-create-btn {
-    background: #fcfbf8;
-    border: 1px solid #1a1a1a;
-    color: #1a1a1a;
-    padding: 12px;
-    border-radius: 0;
-    width: calc(100% - 32px);
-    margin: 0 16px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-  .sys-create-btn:hover {
-    background: #1a1a1a;
-    color: #fcfbf8;
-  }
+
   .sys-danger {
     background: transparent;
     border: 1px solid #e0005a;
@@ -269,14 +281,7 @@
   .sys-save-btn:hover {
     background: #e0005a;
   }
-  .sys-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: #a1a1aa;
-    font-style: italic;
-  }
+
   .sys-textarea {
     flex: 1;
     width: 100%;

@@ -189,7 +189,7 @@ impl super::Orchestrator {
                 .await;
 
             let mut result_summary_md = String::from("### Tool Execution Results\n");
-            for r in results {
+            for r in &results {
                 let status = if r.ok { "SUCCESS" } else { "FAIL" };
                 let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name, "action": r.action, "status": status}}))).await;
 
@@ -218,7 +218,12 @@ impl super::Orchestrator {
                 }
             }
             if let Some(fail_msg) = critical_fail {
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critical_tool_failure", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.critical_tool_failure", "args": {}})
+                    ))
+                    .await;
                 history.push(ChatMessage {
                     role: "assistant".to_string(),
                     content: fail_msg.clone(),
