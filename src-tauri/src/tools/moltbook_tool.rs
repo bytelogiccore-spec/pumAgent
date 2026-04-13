@@ -33,7 +33,9 @@ impl MoltbookTool {
 
         // Fallback or legacy file check
         if let Ok(data) = std::fs::read_to_string(self.credentials_path()) {
-            if let Ok(creds) = serde_json::from_str(&data) {
+            if let Ok(creds) = serde_json::from_str::<MoltbookCreds>(&data) {
+                // Instantly migrate legacy plain-text to Vault
+                self.save_credentials(&creds);
                 return creds;
             }
         }
