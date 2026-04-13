@@ -36,7 +36,7 @@ chrono = "0.4.44"
 futures = "0.3.32"
 urlencoding = "2.1.3"
 rand = "0.8.5"
-teloxide = { version = "0.13.0", features = ["macros"] }
+teloxide = { version = "0.13.0", default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
 cron = "0.16.0"
 dbx-core = "0.2.2"
 regex = "1.12.3"
