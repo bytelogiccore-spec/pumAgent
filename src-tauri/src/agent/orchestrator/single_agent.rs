@@ -172,7 +172,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 .await;
             if response_res.is_err() {
                 let primary_err = response_res.as_ref().unwrap_err(); /* get the error clone or format string */
-                let _ = log_tx.send(format!("[경고] 주력 LLM 통신 실패: {}. 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...", primary_err)).await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_fallback", "args": {"err": primary_err.to_string()}}))).await;
 
                 for fallback_ep in self.get_fallback_endpoints(&active_worker_id) {
                     response_res = crate::agent::llm_client::LLMClient::new(
@@ -184,7 +184,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     .await;
                     if response_res.is_ok() {
                         active_worker_id = fallback_ep.id.clone();
-                        let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                        let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
                         break;
                     }
                 }
@@ -194,7 +194,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 Ok(res) => res,
                 Err(e) => {
                     let err_msg = format!("최종 LLM 통신 불가 (활성화된 모든 모델 실패): {}", e);
-                    let _ = log_tx.send(format!("[치명적 오류] {}", err_msg)).await;
+                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}}))).await;
                     return Err(err_msg);
                 }
             };
@@ -210,7 +210,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 snippet
             };
             let preview_clean = preview.replace("\n", " ");
-            let _ = log_tx.send(format!("[AI 추론] {}", preview_clean)).await;
+            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.ai_reasoning", "args": {"preview": preview_clean}}))).await;
 
             // Clean ai_text to prevent injecting hallucinated tool_responses into history
             let mut clean_ai_text = ai_text.clone();

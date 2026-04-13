@@ -24,6 +24,13 @@
 
   onMount(async () => {
     listen<string>("tool_log", (event) => {
+      try {
+        if (event.payload.startsWith("i18n:")) {
+          const logData = JSON.parse(event.payload.replace("i18n:", ""));
+          addLog(t(logData.key, logData.args));
+          return;
+        }
+      } catch(e) {}
       addLog(event.payload);
     });
 

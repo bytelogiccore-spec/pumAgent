@@ -108,20 +108,13 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
         loop {
             if cancel_flag.load(Ordering::Relaxed) {
-                let _ = log_tx
-                    .send("[안내] 사용자에 의해 에이전트 실행이 중지되었습니다.".to_string())
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.agent_stopped_by_user", "args": {}}))).await;
                 return Ok(("[사용자 중지됨]".to_string(), history));
             }
 
             loop_count += 1;
             if loop_count > max_loops {
-                let _ = log_tx
-                    .send(format!(
-                        "[경고] 최대 루프 제한({}회)에 도달했습니다.",
-                        max_loops
-                    ))
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.max_loops_reached", "args": {"loops": max_loops}}))).await;
                 break;
             }
 
@@ -139,12 +132,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 }
                 tasks_md.push_str("\nPLANNER, please execute the required tool calls to satisfy these scheduled tasks.");
 
-                let _ = log_tx
-                    .send(
-                        "[안내] 백그라운드 예약된 작업(Schedule) 실행 지시문을 주입했습니다."
-                            .to_string(),
-                    )
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.injected_scheduled_task", "args": {}}))).await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: tasks_md,
@@ -152,12 +140,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 });
             }
 
-            let _ = log_tx
-                .send(format!(
-                    "[Step {}/Planner] 도구 실행 계획 수립 중...",
-                    loop_count
-                ))
-                .await;
+            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_planning", "args": {"step": loop_count}}))).await;
 
             let mut planner_res_result = self
                 .get_llm_client_by_id(&active_planner_id)
@@ -165,7 +148,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 .await;
             if planner_res_result.is_err() {
                 let err = planner_res_result.as_ref().unwrap_err();
-                let _ = log_tx.send(format!("[경고] 주력 LLM(Planner) 통신 실패: {}. 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...", err)).await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_fallback", "args": {"err": err.to_string()}}))).await;
 
                 for fallback_ep in self.get_fallback_endpoints(&active_planner_id) {
                     planner_res_result = crate::agent::llm_client::LLMClient::new(
@@ -177,7 +160,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     .await;
                     if planner_res_result.is_ok() {
                         active_planner_id = fallback_ep.id.clone();
-                        let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                        let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
                         break;
                     }
                 }
@@ -200,12 +183,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
                 // If it doesn't say "DONE", it means planner replied directly
                 if !text_res.to_uppercase().contains("DONE") {
-                    let _ = log_tx
-                        .send(
-                            "[Planner] 도구 검색이 필요 없는 단순 대화로 판단하여 즉시 답변합니다."
-                                .to_string(),
-                        )
-                        .await;
+                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_direct_answer", "args": {}}))).await;
                     history.push(ChatMessage {
                         role: "assistant".to_string(),
                         content: text_res.to_string(),
@@ -215,12 +193,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     return Ok((Self::sanitize_output(text_res), history));
                 }
 
-                let _ = log_tx
-                    .send(
-                        "[Planner] 도구 수집이 완료되었습니다. 전문 작성(Writer)으로 넘어갑니다."
-                            .to_string(),
-                    )
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_tools_done", "args": {}}))).await;
                 // Run Writer Agent
                 let fallback_writer_prompt_string = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}. If the user merely sent a standard greeting or simple chatter without requiring tool lookups, just reply naturally and conversationally.", lang_name);
                 let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt_string);
@@ -239,15 +212,13 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                         lang_name
                     ), images_base64: None });
 
-                let _ = log_tx
-                    .send("[Writer] 최종 답변 작성 중...".to_string())
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_writing", "args": {}}))).await;
                 let mut writer_res_result = self
                     .get_llm_client_by_id(&active_writer_id)
                     .chat(&writer_history, 0.7)
                     .await;
                 if writer_res_result.is_err() {
-                    let _ = log_tx.send("[경고] Writer LLM 에러, 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...".to_string()).await;
+                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_fallback", "args": {}}))).await;
                     for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
                         writer_res_result = crate::agent::llm_client::LLMClient::new(
                             fallback_ep.api_url.clone(),
@@ -283,12 +254,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 images_base64: None,
             });
 
-            let _ = log_tx
-                .send(format!(
-                    "[Planner] {}개의 도구 실행을 요청했습니다.",
-                    json_blocks.len()
-                ))
-                .await;
+            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_tools_requested", "args": {"count": json_blocks.len()}}))).await;
             let results = self
                 .multi_agent
                 .execute_tools(
@@ -301,17 +267,13 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             let mut result_summary_md = String::from("### Tool Execution Results\n");
             for r in results {
                 let status = if r.ok { "성공" } else { "실패" };
-                let _ = log_tx
-                    .send(format!(" -> [{}.{}] {}", r.tool_name, r.action, status))
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name, "action": r.action, "status": status}}))).await;
 
                 if r.ok
                     && (r.action == "write" || r.action == "write_artifact")
                     && (r.tool_name == "brain" || r.tool_name == "knowledge")
                 {
-                    let _ = log_tx
-                        .send(format!("[DB 저장 이벤트] 💾 {} 도구를 통해 데이터베이스에 저장이 완료되었습니다.", r.tool_name))
-                        .await;
+                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.db_saved", "args": {"tool": r.tool_name}}))).await;
                 }
 
                 result_summary_md.push_str(&format!(
@@ -321,9 +283,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             }
 
             // Critic Agent Phase
-            let _ = log_tx
-                .send("[Critic] 수집된 데이터의 유효성을 검증합니다...".to_string())
-                .await;
+            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_validating", "args": {}}))).await;
 
             let query = user_messages
                 .iter()
@@ -349,7 +309,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 .await;
 
             if critic_res_result.is_err() {
-                let _ = log_tx.send("[경고] Critic LLM 에러, 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...".to_string()).await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_fallback", "args": {}}))).await;
                 for fallback_ep in self.get_fallback_endpoints(&active_critic_id) {
                     critic_res_result = crate::agent::llm_client::LLMClient::new(
                         fallback_ep.api_url.clone(),
@@ -379,11 +339,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             });
 
             if critic_res.content.contains("STATUS: PASS") {
-                let _ = log_tx
-                    .send(
-                        "[Critic] 검증 완료. 데이터가 충분합니다. Writer에게 넘깁니다.".to_string(),
-                    )
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_pass", "args": {}}))).await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: result_summary_md,
@@ -403,9 +359,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 writer_history.insert(0, writer_prompt);
                 writer_history.push(ChatMessage { role: "user".to_string(), content: format!("The user's request has been fulfilled or the data is ready. Please provide the final response to the user in {}. DO NOT unnecessarily repeat conversational history. Focus ONLY on what was just done or discovered.", lang_name), images_base64: None });
 
-                let _ = log_tx
-                    .send("[Writer] 최종 답변 정리 중...".to_string())
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_summarizing", "args": {}}))).await;
                 let mut writer_res_result = self
                     .get_llm_client_by_id(&active_writer_id)
                     .chat(&writer_history, 0.7)
@@ -444,7 +398,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     .replace("STATUS: FAIL", "")
                     .trim()
                     .to_string();
-                let _ = log_tx.send(format!("[Critic] 검증 실패: {}", fb)).await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_fail", "args": {"feedback": fb}}))).await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: format!("SYSTEM OBSERVATION RESULTS:\n{}\n\n[Critic Agent Feedback]\nYour last tool executed, but the task is not yet complete. Critic feedback: {}\nPlease use tools again with different strategies to fulfill the task.", result_summary_md, fb),

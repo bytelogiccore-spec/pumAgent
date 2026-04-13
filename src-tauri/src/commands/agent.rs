@@ -56,9 +56,7 @@ pub async fn execute_agent_tools(
     // Reset cancel flag before starting
     state.cancel_flag.store(false, Ordering::Relaxed);
 
-    let _ = tx
-        .send("[시스템] 워커 및 각 역할별 엔드포인트 연결을 준비합니다...".to_string())
-        .await;
+    let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_endpoints_preparing", "args": {}}))).await;
 
     let orchestrator_routing = crate::agent::orchestrator::OrchestratorRouting {
         endpoints: payload.endpoints.clone(),
@@ -100,15 +98,15 @@ pub async fn execute_agent_tools(
                 let content_clone = last_msg.content.clone();
                 for cap in re.captures_iter(&content_clone) {
                     let url = cap[0].trim_end_matches(|c: char| !c.is_alphanumeric() && c != '/');
-                    let _ = tx.send(format!("[시스템] 사용자 쿼리 내에서 URL({})을 감지하여 자동 크롤링(Auto-Scraping)을 시작합니다...", url)).await;
+                    let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_auto_scraping_started", "args": {"url": url}}))).await;
                     let crawler = crate::tools::crawler::Crawler::new();
                     match crawler.scrape(url).await {
                         Ok(markdown) => {
-                            let _ = tx.send("[시스템] 기습 크롤링 성공! 페이지 데이터를 프롬프트 문맥에 선제적으로(Pre-fetch) 캐싱했습니다.".to_string()).await;
+                            let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_auto_scraping_success", "args": {}}))).await;
                             appended_context.push_str(&format!("\n\n[SYSTEM PRE-FETCHED CONTENT FOR {}]\n{}\n", url, markdown));
                         }
                         Err(e) => {
-                            let _ = tx.send(format!("[시스템] 자동 크롤링 실패 (보안 또는 렌더링 에러): {}", e)).await;
+                            let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_auto_scraping_failed", "args": {"err": e.to_string()}}))).await;
                         }
                     }
                 }
@@ -137,9 +135,7 @@ pub async fn execute_agent_tools(
         )
         .await?;
 
-    let _ = tx
-        .send("[시스템] 응답 처리가 완전히 종료되었습니다.".to_string())
-        .await;
+    let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_execution_ended", "args": {}}))).await;
 
     // Spawn Reflector Agent asynchronously if workflow is enabled
     if payload.use_multi_agent_workflow {
@@ -240,7 +236,11 @@ pub async fn execute_background_scheduler(
     let app_clone = app.clone();
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            let _ = app_clone.emit("tool_log", format!("[백그라운드] {}", msg));
+            if msg.starts_with("i18n:") {
+                let _ = app_clone.emit("tool_log", msg);
+            } else {
+                let _ = app_clone.emit("tool_log", format!("[백그라운드] {}", msg));
+            }
         }
     });
 
