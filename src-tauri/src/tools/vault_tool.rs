@@ -75,24 +75,21 @@ impl VaultTool {
         let mut output = String::new();
 
         match action.as_str() {
-            "set" => {
-                if let (Some(key), Some(value)) = (
-                    args.get("key").and_then(|v| v.as_str()),
-                    args.get("value").and_then(|v| v.as_str()),
-                ) {
-                    match self.set_secret(key, value) {
+            "request" => {
+                if let Some(key) = args.get("key").and_then(|v| v.as_str()) {
+                    match self.set_secret(key, "[USER_MUST_ENTER_VALUE_IN_SETTINGS_UI]") {
                         Ok(_) => {
                             ok = true;
-                            output = format!("Secret '{}' securely saved in OS Keyring. You can use it in other tools via {{{{vault:{}}}}}", key, key);
+                            output = format!("Key '{}' registered in Vault. Please instruct the user to open system settings and fill in the actual secret value.", key);
                         }
                         Err(e) => {
                             ok = false;
-                            output = format!("Failed to save secret: {}", e);
+                            output = format!("Failed to register key: {}", e);
                         }
                     }
                 } else {
                     ok = false;
-                    output = "Missing 'key' or 'value' arguments.".to_string();
+                    output = "Missing 'key' argument.".to_string();
                 }
             }
             "delete" => {
