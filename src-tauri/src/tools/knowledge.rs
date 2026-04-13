@@ -146,6 +146,83 @@ impl KnowledgeTool {
         let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
 
         match action.as_str() {
+            "summarize" => {
+                let llm = match llm {
+                    Some(l) => l,
+                    None => {
+                        return crate::agent::multi_agent::ToolResult {
+                            tool_name: tool,
+                            action,
+                            ok: false,
+                            output: "LLM Client not available for summarization.".to_string(),
+                        }
+                    }
+                };
+
+                let content = match self.read(domain_str, name) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        return crate::agent::multi_agent::ToolResult {
+                            tool_name: tool,
+                            action,
+                            ok: false,
+                            output: e,
+                        }
+                    }
+                };
+
+                let tags = if let Some(line) = content
+                    .lines()
+                    .find(|l| l.to_lowercase().starts_with("# tags:"))
+                {
+                    line.to_string()
+                } else {
+                    format!("Domain: {}", domain_str)
+                };
+
+                let prompt = format!(
+                    "Summarize the following knowledge item from the [{}] domain. Use the tags [{}] for context. \
+                    Focus on distilling key facts, definitions, and workflows while stripping redundant details. \
+                    The goal is to keep it high-density for future AI reference. \
+                    Return ONLY the summarized content. \n\nCONTENT:\n{}",
+                    domain_str, tags, content
+                );
+
+                let msgs = vec![crate::agent::llm_client::ChatMessage {
+                    role: "user".to_string(),
+                    content: prompt,
+                    images_base64: None,
+                }];
+
+                match llm.chat(&msgs, 0.4).await {
+                    Ok(res) => {
+                        let summary = res.content.trim();
+                        match self.write(domain_str, name, summary) {
+                            Ok(_) => crate::agent::multi_agent::ToolResult {
+                                tool_name: tool,
+                                action,
+                                ok: true,
+                                output: format!(
+                                    "Successfully summarized and replaced '{}:{}'.",
+                                    domain_str, name
+                                ),
+                            },
+                            Err(e) => crate::agent::multi_agent::ToolResult {
+                                tool_name: tool,
+                                action,
+                                ok: false,
+                                output: e,
+                            },
+                        }
+                    }
+                    Err(e) => crate::agent::multi_agent::ToolResult {
+                        tool_name: tool,
+                        action,
+                        ok: false,
+                        output: format!("LLM Summarization failed: {}", e),
+                    },
+                }
+            }
             "list" => {
                 let result = self.list(domain_str);
                 crate::agent::multi_agent::ToolResult {

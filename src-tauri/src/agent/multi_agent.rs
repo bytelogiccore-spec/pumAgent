@@ -287,7 +287,11 @@ impl MultiAgent {
                 let mut res = match tool.as_str() {
                     "crawl4ai" => crawler.execute_action(tool, action, args).await,
                     "search" => search_tool.execute_action(tool, action, args).await,
-                    "brain" => brain_tool.execute_action(tool, action, args),
+                    "brain" => {
+                        brain_tool
+                            .execute_action(tool, action, args, llm_clone)
+                            .await
+                    }
                     "knowledge" => {
                         knowledge_tool
                             .execute_action(tool, action, args, llm_clone, registry_prompt_clone)

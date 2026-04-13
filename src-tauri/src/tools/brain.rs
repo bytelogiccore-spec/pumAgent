@@ -1,3 +1,4 @@
+use crate::agent::llm_client::LLMClient;
 use dbx_core::Database;
 use std::sync::Arc;
 
@@ -81,14 +82,91 @@ impl BrainTool {
         }
     }
 
-    pub fn execute_action(
+    pub async fn execute_action(
         &self,
         tool: String,
         action: String,
         args: serde_json::Value,
+        llm: Option<LLMClient>,
     ) -> crate::agent::multi_agent::ToolResult {
         let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
         match action.as_str() {
+            "summarize" => {
+                let llm = match llm {
+                    Some(l) => l,
+                    None => {
+                        return crate::agent::multi_agent::ToolResult {
+                            tool_name: tool,
+                            action,
+                            ok: false,
+                            output: "LLM Client not available for summarization.".to_string(),
+                        }
+                    }
+                };
+
+                let content = match self.read_artifact(name) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        return crate::agent::multi_agent::ToolResult {
+                            tool_name: tool,
+                            action,
+                            ok: false,
+                            output: e,
+                        }
+                    }
+                };
+
+                // Extract tags from content (e.g., # Tags: tag1, tag2)
+                let tags = if let Some(line) = content
+                    .lines()
+                    .find(|l| l.to_lowercase().starts_with("# tags:"))
+                {
+                    line.to_string()
+                } else {
+                    "No specific tags".to_string()
+                };
+
+                let prompt = format!(
+                    "Summarize the following brain artifact based on its tags [{}]. \
+                    Focus on distilling key facts, decisions, and data while stripping conversational filler or redundant details. \
+                    The goal is to keep it concise and high-density for future reference by an AI agent. \
+                    Return ONLY the summarized content, no introductions or filler. \n\nCONTENT:\n{}",
+                    tags, content
+                );
+
+                let msgs = vec![crate::agent::llm_client::ChatMessage {
+                    role: "user".to_string(),
+                    content: prompt,
+                    images_base64: None,
+                }];
+
+                match llm.chat(&msgs, 0.4).await {
+                    Ok(res) => {
+                        let summary = res.content.trim();
+                        // Overwrite original
+                        match self.write_artifact(name, summary) {
+                            Ok(_) => crate::agent::multi_agent::ToolResult {
+                                tool_name: tool,
+                                action,
+                                ok: true,
+                                output: format!("Successfully summarized and replaced '{}'.", name),
+                            },
+                            Err(e) => crate::agent::multi_agent::ToolResult {
+                                tool_name: tool,
+                                action,
+                                ok: false,
+                                output: e,
+                            },
+                        }
+                    }
+                    Err(e) => crate::agent::multi_agent::ToolResult {
+                        tool_name: tool,
+                        action,
+                        ok: false,
+                        output: format!("LLM Summarization failed: {}", e),
+                    },
+                }
+            }
             "list" => {
                 let result = self.list_artifacts();
                 crate::agent::multi_agent::ToolResult {

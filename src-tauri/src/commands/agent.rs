@@ -552,6 +552,97 @@ pub async fn delete_vault_secret(state: State<'_, AgentState>, key: String) -> R
 }
 
 #[tauri::command]
+pub async fn summarize_log_file(
+    name: String,
+    state: State<'_, AgentState>,
+) -> Result<String, String> {
+    let config = AppConfig::load(&state.base_dir);
+    let endpoint = config
+        .endpoints
+        .iter()
+        .find(|e| e.is_enabled)
+        .cloned()
+        .ok_or_else(|| "No enabled LLM endpoints found.".to_string())?;
+
+    let llm = LLMClient::new(endpoint.api_url, endpoint.model, endpoint.api_key);
+    let log_path = state.base_dir.join("logs").join(&name);
+    let content = fs::read_to_string(&log_path).map_err(|e| e.to_string())?;
+
+    let prompt = format!(
+        "Summarize the following session log. Focus on the final results, key user requests, and critical data points. \
+        Strip away internal thought processes, planning chatter, and redundant tool output details. \
+        The goal is a concise but complete retrospective of the session. \
+        Return ONLY the summarized content in Markdown format. \n\nCONTENT:\n{}",
+        content
+    );
+
+    let msgs = vec![ChatMessage {
+        role: "user".to_string(),
+        content: prompt,
+        images_base64: None,
+    }];
+
+    match llm.chat(&msgs, 0.3).await {
+        Ok(res) => {
+            let summary = res.content.trim();
+            fs::write(&log_path, summary).map_err(|e| e.to_string())?;
+            Ok(summary.to_string())
+        }
+        Err(e) => Err(format!("LLM Summarization failed: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn ai_summarize_item(
+    domain: String,
+    name: String,
+    state: State<'_, AgentState>,
+) -> Result<String, String> {
+    let config = AppConfig::load(&state.base_dir);
+    let endpoint = config
+        .endpoints
+        .iter()
+        .find(|e| e.is_enabled)
+        .cloned()
+        .ok_or_else(|| "No enabled LLM endpoints found.".to_string())?;
+
+    let llm = LLMClient::new(endpoint.api_url, endpoint.model, endpoint.api_key);
+
+    if domain == "brain" {
+        let brain = crate::tools::brain::BrainTool::new(state.db.clone());
+        let res = brain
+            .execute_action(
+                "brain".into(),
+                "summarize".into(),
+                serde_json::json!({"name": name}),
+                Some(llm),
+            )
+            .await;
+        if res.ok {
+            Ok(res.output)
+        } else {
+            Err(res.output)
+        }
+    } else {
+        let knowledge = crate::tools::knowledge::KnowledgeTool::new(state.db.clone());
+        let res = knowledge
+            .execute_action(
+                "knowledge".into(),
+                "summarize".into(),
+                serde_json::json!({"domain": domain, "name": name}),
+                Some(llm),
+                None,
+            )
+            .await;
+        if res.ok {
+            Ok(res.output)
+        } else {
+            Err(res.output)
+        }
+    }
+}
+
+#[tauri::command]
 pub fn get_next_execution_time(config: crate::agent::scheduler::ScheduleConfig) -> String {
     config.get_next_run_time(chrono::Utc::now())
 }

@@ -74,6 +74,31 @@
     }
   });
 
+  let summarizing: boolean = $state(false);
+
+  async function handleSummarize() {
+    if (!appState.viewingItemName) return;
+    summarizing = true;
+    try {
+      let result: string;
+      if (appState.sysModalDomain === "logs") {
+        result = await invoke("summarize_log_file", { name: appState.viewingItemName });
+      } else {
+        result = await invoke("ai_summarize_item", { 
+          domain: appState.sysModalDomain, 
+          name: appState.viewingItemName 
+        });
+      }
+      appState.viewingItemContent = result;
+      // Also update the list item preview if possible (optional)
+    } catch (e) {
+      console.error("Summarization failed:", e);
+      alert("Summarization failed: " + e);
+    } finally {
+      summarizing = false;
+    }
+  }
+
 </script>
 
 <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fcfbf8; height: 100%;">
@@ -138,8 +163,15 @@
           <button class="sys-save-btn" onclick={() => { appState.viewingItemName = null; appState.viewingItemContent = null; }} style="background:transparent; color:#1a1a1a; border:1px solid #1a1a1a; padding: 4px 12px; text-transform:none;">← Back</button>
           <div style="font-weight:600;">{appState.viewingItemName}</div>
         </div>
-        {#if ["skills", "rules", "workflows", "brain", "schedules", "vault"].includes(appState.sysModalDomain)}
-          <button class="sys-save-btn" onclick={saveSysItem}>{t("knowledge.save")}</button>
+        {#if ["skills", "rules", "workflows", "brain", "logs"].includes(appState.sysModalDomain)}
+          <div style="display: flex; gap: 8px;">
+            <button class="sys-save-btn" style="background:#0284c7;" onclick={handleSummarize} disabled={summarizing}>
+              {summarizing ? "Summarizing..." : "✨ AI 요약"}
+            </button>
+            {#if appState.sysModalDomain !== "logs"}
+              <button class="sys-save-btn" onclick={saveSysItem}>{t("knowledge.save")}</button>
+            {/if}
+          </div>
         {/if}
       </div>
       {#if appState.sysModalDomain === "logs" || (appState.sysModalDomain === "brain" && (!appState.viewingItemName || appState.viewingItemName.endsWith(".md")))}

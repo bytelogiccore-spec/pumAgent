@@ -285,7 +285,9 @@ pub fn run() {
             commands::agent::list_vault_keys,
             commands::agent::set_vault_secret,
             commands::agent::delete_vault_secret,
-            commands::agent::get_next_execution_time
+            commands::agent::get_next_execution_time,
+            commands::agent::summarize_log_file,
+            commands::agent::ai_summarize_item
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
