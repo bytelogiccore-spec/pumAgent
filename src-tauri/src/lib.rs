@@ -57,18 +57,13 @@ pub fn run() {
                 let _ = app_handle.emit("system_panic", error_message);
             }));
 
-            #[cfg(debug_assertions)]
-            let base_dir = std::env::current_dir()
-                .unwrap_or_default()
-                .join("..")
-                .join("..")
-                .join("PumAgentData");
+            #[cfg(target_os = "windows")]
+            let base_dir = std::path::PathBuf::from("D:\\ByteLogicCore\\AI\\PumAgentData");
 
-            #[cfg(not(debug_assertions))]
-            let base_dir = std::env::current_dir()
-                .unwrap_or_default()
-                .join("..")
-                .join("PumAgentData");
+            #[cfg(not(target_os = "windows"))]
+            let base_dir = std::env::var("PUMAGENT_DATA_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from("/opt/PumAgentData"));
 
             if !base_dir.exists() {
                 let _ = fs::create_dir_all(&base_dir);
