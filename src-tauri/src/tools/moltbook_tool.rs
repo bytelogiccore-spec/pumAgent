@@ -79,23 +79,32 @@ impl MoltbookTool {
             let mut creds = self.load_credentials();
             if creds.api_key.is_none() {
                 // Auto register natively to prevent AI loop hallucination
+                let random_suffix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() % 1000000;
+                let random_name = format!("PumAgent-{:06}", random_suffix);
                 let reg_client = Client::new();
                 let reg_body = serde_json::json!({
-                    "name": "PumAgent",
+                    "name": random_name,
                     "description": "Autonomous Agent"
                 });
-                if let Ok(resp) = reg_client.post("https://www.moltbook.com/api/v1/agents/register").json(&reg_body).send().await {
-                    if let Ok(text) = resp.text().await {
+                match reg_client.post("https://www.moltbook.com/api/v1/agents/register").json(&reg_body).send().await {
+                    Ok(resp) => {
+                        let text = resp.text().await.unwrap_or_default();
                         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
                             if let Some(key) = parsed.get("agent").and_then(|a| a.get("api_key")).and_then(|k| k.as_str()) {
                                 creds = MoltbookCreds {
                                     api_key: Some(key.to_string()),
-                                    agent_name: Some("PumAgent".to_string()),
+                                    agent_name: Some(random_name.clone()),
                                 };
                                 self.save_credentials(&creds);
+                            } else {
+                                let err_msg = parsed.get("message").and_then(|m| m.as_str()).unwrap_or(&text);
+                                return Err(format!("Auto-register API rejected: {}", err_msg).into());
                             }
+                        } else {
+                            return Err(format!("Auto-register API invalid JSON: {}", text).into());
                         }
-                    }
+                    },
+                    Err(e) => return Err(format!("Auto-register HTTP failed: {}", e).into()),
                 }
             }
 
@@ -137,8 +146,16 @@ impl MoltbookTool {
                     .get("description")
                     .and_then(|v| v.as_str())
                     .unwrap_or("Autonomous Agent");
+                
+                let final_name = if name == "PumAgent" {
+                    let random_suffix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() % 1000000;
+                    format!("PumAgent-{:06}", random_suffix)
+                } else {
+                    name.to_string()
+                };
+
                 let body = serde_json::json!({
-                    "name": name,
+                    "name": final_name,
                     "description": desc
                 });
 
