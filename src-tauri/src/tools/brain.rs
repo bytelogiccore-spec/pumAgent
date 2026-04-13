@@ -20,8 +20,9 @@ impl BrainTool {
                     if let Ok(name) = String::from_utf8(key) {
                         let content = String::from_utf8_lossy(&val);
                         let mut preview = content.trim().replace('\n', " ");
-                        if preview.len() > 100 {
-                            preview = format!("{}...", &preview[..100]);
+                        if preview.chars().count() > 100 {
+                            let snippet: String = preview.chars().take(100).collect();
+                            preview = format!("{}...", snippet);
                         }
                         list_md.push_str(&format!("- **{}** (Preview: {})\n", name, preview));
                         count += 1;

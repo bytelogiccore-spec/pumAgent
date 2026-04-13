@@ -142,8 +142,9 @@ impl Orchestrator {
                     } else if k_str.starts_with("skills:") || k_str.starts_with("workflows:") {
                         let content = String::from_utf8_lossy(&val);
                         let mut preview = content.trim().replace('\n', " ");
-                        if preview.len() > 100 {
-                            preview = format!("{}...", &preview[..100]);
+                        if preview.chars().count() > 100 {
+                            let snippet: String = preview.chars().take(100).collect();
+                            preview = format!("{}...", snippet);
                         }
                         modules_str.push_str(&format!(
                             "- Domain: {}, Name: {} (Preview: {})\n",
