@@ -224,7 +224,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     ))
                     .await;
                 // Run Writer Agent
-                let fallback_writer_prompt_string = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}. If the user merely sent a standard greeting or simple chatter without requiring tool lookups, just reply naturally and conversationally.", lang_name);
+                let fallback_writer_prompt_string = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}. If the user merely sent a standard greeting or simple chatter without requiring tool lookups, just reply naturally and conversationally. CRITICAL: If the user asked to read data (e.g. read a feed, logs, list items, or a file), you MUST literally output the actual data/content retrieved from the tools. DO NOT abstractly summarize it! Quote the data clearly.", lang_name);
                 let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt_string);
 
                 let writer_prompt = ChatMessage {

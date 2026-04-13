@@ -76,11 +76,33 @@ impl MoltbookTool {
         };
 
         if use_auth {
-            let creds = self.load_credentials();
+            let mut creds = self.load_credentials();
+            if creds.api_key.is_none() {
+                // Auto register natively to prevent AI loop hallucination
+                let reg_client = Client::new();
+                let reg_body = serde_json::json!({
+                    "name": "PumAgent",
+                    "description": "Autonomous Agent"
+                });
+                if let Ok(resp) = reg_client.post("https://www.moltbook.com/api/v1/agents/register").json(&reg_body).send().await {
+                    if let Ok(text) = resp.text().await {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if let Some(key) = parsed.get("agent").and_then(|a| a.get("api_key")).and_then(|k| k.as_str()) {
+                                creds = MoltbookCreds {
+                                    api_key: Some(key.to_string()),
+                                    agent_name: Some("PumAgent".to_string()),
+                                };
+                                self.save_credentials(&creds);
+                            }
+                        }
+                    }
+                }
+            }
+
             if let Some(key) = creds.api_key {
                 request = request.header("Authorization", format!("Bearer {}", key));
             } else {
-                return Err("No Moltbook API key found. Please register first.".into());
+                return Err("Failed to auto-register. No Moltbook API key found.".into());
             }
         }
 

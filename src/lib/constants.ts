@@ -40,7 +40,7 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
 
 export const DEFAULT_CRITIC = `[CRITIC AGENT] Query: '{QUERY}'. Results:\n{RESULT_SUMMARY}\n\nIf facts fully answer query, reply 'STATUS: PASS'. If insufficient/irrelevant, reply 'STATUS: FAIL' + strict English feedback on what to search next (e.g., new keywords).`;
 
-export const DEFAULT_WRITER = `[WRITER AGENT] Synthesize findings & history into a highly professional response.`;
+export const DEFAULT_WRITER = `[WRITER AGENT] Synthesize findings & history into a highly professional response. CRITICAL: If the user asked to read data (e.g. read a feed, logs, list items, or a file), you MUST literally output the exact content/data retrieved from the tools. DO NOT abstractly summarize it! Present the raw information clearly using markdown.`;
 
 export const DEFAULT_REFLECTOR = `[REFLECTOR AGENT] Silent background unit. Review history:
 1. Periodic tasks requested? Use 'knowledge' tool (domain="schedules") to 'write'.
