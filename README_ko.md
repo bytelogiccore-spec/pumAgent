@@ -40,13 +40,12 @@ PumAgent가 조금이라도 일상을 편리하고 즐겁게 만들어주셨나�
 
 ---
 
-## 🛠️ 백엔드 기술 스택 (The Geeky Stuff)
+## 🛠️ 기술 스택 (Technology Stack)
 
-우리는 압도적 퍼포먼스와 안정성을 위해 최고의 무기들만 골랐습니다:
-1. **프론트엔드**: Svelte 5 + Vite + TypeScript (극강의 반응형 UI 선사)
-2. **백엔드 심장**: Rust + Tauri (안전하고 타협 없는 네이티브 처리 속도)
-3. **독자 데이터베이스**: `DBX-Core` (Zero-Latency를 지향하는 Key-Value 스토리지)
-4. **AI 모델 연동**: 사생활 보호를 위한 로컬 모델(Ollama) 부터 가장 똑똑한 외부 API (OpenAI, Gemini) 지원
+- **프론트엔드**: Svelte 5 + Vite + TypeScript
+- **백엔드**: Rust + Tauri
+- **데이터베이스**: `DBX-Core` 로컬 저장소
+- **AI 추론(Inference)**: Ollama (로컬) / OpenAI, Gemini (외부 API)
 
 ---
 

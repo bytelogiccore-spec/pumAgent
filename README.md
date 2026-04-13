@@ -40,13 +40,12 @@ Meet **PumAgent**. It's not just another ChatGPT clone. It is a highly capable, 
 
 ---
 
-## 🛠️ The Geeky Stuff (Tech Stack)
+## 🛠️ Technology Stack
 
-We chose the absolute best tools for performance and safety:
-1. **Frontend**: Svelte 5 + Vite + TypeScript (Incredibly responsive UI)
-2. **Backend Engine**: Rust + Tauri (Safe, native speeds)
-3. **Storage Engine**: `DBX-Core` (Custom, zero-latency Key-Value local storage)
-4. **AI Powers**: Supports Local Inference (Ollama) and Dynamic External LLMs (OpenAI, Gemini)
+- **Frontend**: Svelte 5 + Vite + TypeScript
+- **Backend**: Rust + Tauri
+- **Storage**: `DBX-Core` Key-Value local storage
+- **AI Inference**: Ollama (Local) / OpenAI, Gemini (External)
 
 ---
 
