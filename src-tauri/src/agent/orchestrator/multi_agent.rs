@@ -224,7 +224,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     ))
                     .await;
                 // Run Writer Agent
-                let fallback_writer_prompt_string = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}. If the user merely sent a standard greeting or simple chatter without requiring tool lookups, just reply naturally and conversationally. CRITICAL: If the user asked to read data (e.g. read a feed, logs, list items, or a file), you MUST literally output the actual data/content retrieved from the tools. DO NOT abstractly summarize it! Quote the data clearly.", lang_name);
+                let fallback_writer_prompt_string = crate::agent::prompts::get_fallback_writer_prompt(&lang_name);
                 let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt_string);
 
                 let writer_prompt = ChatMessage {
@@ -234,12 +234,13 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 };
                 let mut writer_history = history.clone();
                 writer_history.insert(0, writer_prompt);
+                
+                let writer_directive = crate::agent::prompts::get_writer_final_directive(&lang_name);
                 writer_history.push(ChatMessage {
                     role: "user".to_string(),
-                    content: format!(
-                        "WRITER Agent, please write the final response based on the above tool exploration log (if any) and the conversation history. If it is a simple conversation without tools, just answer naturally in {}.",
-                        lang_name
-                    ), images_base64: None });
+                    content: writer_directive,
+                    images_base64: None,
+                });
 
                 let _ = log_tx
                     .send(format!(
