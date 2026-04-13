@@ -30,7 +30,7 @@ impl MoltbookTool {
                 return creds;
             }
         }
-        
+
         // Fallback or legacy file check
         if let Ok(data) = std::fs::read_to_string(self.credentials_path()) {
             if let Ok(creds) = serde_json::from_str(&data) {
@@ -44,7 +44,7 @@ impl MoltbookTool {
         if let Ok(data) = serde_json::to_string(creds) {
             let vault = crate::tools::vault_tool::VaultTool::new(self.base_dir.clone());
             let _ = vault.set_secret("moltbook_creds", &data);
-            
+
             // For security, remove the plain text credentials file if it exists
             if self.credentials_path().exists() {
                 let _ = std::fs::remove_file(self.credentials_path());
@@ -105,18 +105,31 @@ impl MoltbookTool {
     ) -> ToolResult {
         let result = match action.as_str() {
             "register" => {
-                let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("PumAgent");
-                let desc = args.get("description").and_then(|v| v.as_str()).unwrap_or("Autonomous Agent");
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("PumAgent");
+                let desc = args
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Autonomous Agent");
                 let body = serde_json::json!({
                     "name": name,
                     "description": desc
                 });
-                
-                match self.execute_http("POST", "/agents/register", Some(body), false).await {
+
+                match self
+                    .execute_http("POST", "/agents/register", Some(body), false)
+                    .await
+                {
                     Ok(resp_str) => {
                         // try to extract api_key
                         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&resp_str) {
-                            if let Some(key) = parsed.get("agent").and_then(|a| a.get("api_key")).and_then(|k| k.as_str()) {
+                            if let Some(key) = parsed
+                                .get("agent")
+                                .and_then(|a| a.get("api_key"))
+                                .and_then(|k| k.as_str())
+                            {
                                 self.save_credentials(&MoltbookCreds {
                                     api_key: Some(key.to_string()),
                                     agent_name: Some(name.to_string()),
@@ -124,7 +137,7 @@ impl MoltbookTool {
                             }
                         }
                         Ok(resp_str)
-                    },
+                    }
                     Err(e) => Err(e),
                 }
             }
@@ -141,15 +154,18 @@ impl MoltbookTool {
                 self.execute_http("GET", &path, None, true).await
             }
             "create_post" => {
-                self.execute_http("POST", "/posts", Some(args.clone()), true).await
+                self.execute_http("POST", "/posts", Some(args.clone()), true)
+                    .await
             }
             "create_comment" => {
                 let post_id = args.get("post_id").and_then(|v| v.as_str()).unwrap_or("");
                 let path = format!("/posts/{}/comments", post_id);
-                self.execute_http("POST", &path, Some(args.clone()), true).await
+                self.execute_http("POST", &path, Some(args.clone()), true)
+                    .await
             }
             "verify" => {
-                self.execute_http("POST", "/verify", Some(args.clone()), true).await
+                self.execute_http("POST", "/verify", Some(args.clone()), true)
+                    .await
             }
             "request" => {
                 // general authenticated request

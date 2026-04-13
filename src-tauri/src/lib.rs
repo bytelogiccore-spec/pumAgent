@@ -290,8 +290,6 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn dump_dbx_contents() {
         let db_path = std::env::current_dir()

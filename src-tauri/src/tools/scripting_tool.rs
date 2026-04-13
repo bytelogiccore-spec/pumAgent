@@ -1,7 +1,7 @@
-use rhai::{Engine, Scope, Dynamic, EvalAltResult};
 use crate::agent::multi_agent::ToolResult;
-use std::collections::HashMap;
 use crate::tools::http_tool::HttpTool;
+use rhai::{Dynamic, Engine, EvalAltResult, Scope};
+use std::collections::HashMap;
 
 pub struct ScriptingTool {}
 
@@ -46,31 +46,41 @@ impl ScriptingTool {
         // We run rhai in a blocking task to avoid locking up tokio async workers
         let res = tokio::task::spawn_blocking(move || {
             let mut engine = Engine::new();
-            
+
             // Expose http_get to Rhai
-            engine.register_fn("http_get", |url: &str| -> Result<String, Box<EvalAltResult>> {
-                tokio::runtime::Handle::current().block_on(async move {
-                    let http = HttpTool::new();
-                    match http.execute("GET", url, None, None).await {
-                        Ok(res) => Ok(res),
-                        Err(e) => Err(format!("HTTP Error: {}", e).into())
-                    }
-                })
-            });
+            engine.register_fn(
+                "http_get",
+                |url: &str| -> Result<String, Box<EvalAltResult>> {
+                    tokio::runtime::Handle::current().block_on(async move {
+                        let http = HttpTool::new();
+                        match http.execute("GET", url, None, None).await {
+                            Ok(res) => Ok(res),
+                            Err(e) => Err(format!("HTTP Error: {}", e).into()),
+                        }
+                    })
+                },
+            );
 
             // Expose http_post to Rhai
             // Takes url, headers as JSON string (or "{}" for empty), and body as string
-            engine.register_fn("http_post", |url: &str, headers_json: &str, body: &str| -> Result<String, Box<EvalAltResult>> {
-                // Parse headers map
-                let parsed_headers: Option<HashMap<String, String>> = serde_json::from_str(headers_json).unwrap_or(None);
-                tokio::runtime::Handle::current().block_on(async move {
-                    let http = HttpTool::new();
-                    match http.execute("POST", url, parsed_headers, Some(body.to_string())).await {
-                        Ok(res) => Ok(res),
-                        Err(e) => Err(format!("HTTP Error: {}", e).into())
-                    }
-                })
-            });
+            engine.register_fn(
+                "http_post",
+                |url: &str, headers_json: &str, body: &str| -> Result<String, Box<EvalAltResult>> {
+                    // Parse headers map
+                    let parsed_headers: Option<HashMap<String, String>> =
+                        serde_json::from_str(headers_json).unwrap_or(None);
+                    tokio::runtime::Handle::current().block_on(async move {
+                        let http = HttpTool::new();
+                        match http
+                            .execute("POST", url, parsed_headers, Some(body.to_string()))
+                            .await
+                        {
+                            Ok(res) => Ok(res),
+                            Err(e) => Err(format!("HTTP Error: {}", e).into()),
+                        }
+                    })
+                },
+            );
 
             // We can add print capability
             engine.on_print(|x| log::info!("Rhai Print: {}", x));
@@ -80,7 +90,8 @@ impl ScriptingTool {
                 Ok(result) => Ok(format!("{}", result)),
                 Err(e) => Err(format!("Script Execution Error: {}", e)),
             }
-        }).await;
+        })
+        .await;
 
         match res {
             Ok(Ok(output)) => ToolResult {
@@ -100,7 +111,7 @@ impl ScriptingTool {
                 action,
                 ok: false,
                 output: format!("Task Panic Error: {}", e),
-            }
+            },
         }
     }
 }

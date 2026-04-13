@@ -56,7 +56,12 @@ pub async fn execute_agent_tools(
     // Reset cancel flag before starting
     state.cancel_flag.store(false, Ordering::Relaxed);
 
-    let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_endpoints_preparing", "args": {}}))).await;
+    let _ = tx
+        .send(format!(
+            "i18n:{}",
+            serde_json::json!({"key": "log.sys_endpoints_preparing", "args": {}})
+        ))
+        .await;
 
     let orchestrator_routing = crate::agent::orchestrator::OrchestratorRouting {
         endpoints: payload.endpoints.clone(),
@@ -75,7 +80,9 @@ pub async fn execute_agent_tools(
         state.db.clone(),
     );
     let mut actual_system_prompt = if payload.use_multi_agent_workflow {
-        payload.worker_prompt.unwrap_or_else(|| payload.system_prompt.clone())
+        payload
+            .worker_prompt
+            .unwrap_or_else(|| payload.system_prompt.clone())
     } else {
         payload.system_prompt.clone()
     };
@@ -103,7 +110,10 @@ pub async fn execute_agent_tools(
                     match crawler.scrape(url).await {
                         Ok(markdown) => {
                             let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_auto_scraping_success", "args": {}}))).await;
-                            appended_context.push_str(&format!("\n\n[SYSTEM PRE-FETCHED CONTENT FOR {}]\n{}\n", url, markdown));
+                            appended_context.push_str(&format!(
+                                "\n\n[SYSTEM PRE-FETCHED CONTENT FOR {}]\n{}\n",
+                                url, markdown
+                            ));
                         }
                         Err(e) => {
                             let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_auto_scraping_failed", "args": {"err": e.to_string()}}))).await;
@@ -135,7 +145,12 @@ pub async fn execute_agent_tools(
         )
         .await?;
 
-    let _ = tx.send(format!("i18n:{}", serde_json::json!({"key": "log.sys_execution_ended", "args": {}}))).await;
+    let _ = tx
+        .send(format!(
+            "i18n:{}",
+            serde_json::json!({"key": "log.sys_execution_ended", "args": {}})
+        ))
+        .await;
 
     // Spawn Reflector Agent asynchronously if workflow is enabled
     if payload.use_multi_agent_workflow {
@@ -306,7 +321,10 @@ pub async fn compress_memory(payload: CompressPayload) -> Result<String, String>
 
     let user_msg = ChatMessage {
         role: "user".to_string(),
-        content: format!("Summarize the following past conversation history:\n\n{}", combined_text),
+        content: format!(
+            "Summarize the following past conversation history:\n\n{}",
+            combined_text
+        ),
         images_base64: None,
     };
 
@@ -426,13 +444,21 @@ pub async fn translate_i18n(
 
     let mut parsed_json = match serde_json::from_str::<serde_json::Value>(&result_json) {
         Ok(v) => v,
-        Err(e) => return Err(format!("Failed to parse LLM output as JSON: {}. Output: {}", e, result_json)),
+        Err(e) => {
+            return Err(format!(
+                "Failed to parse LLM output as JSON: {}. Output: {}",
+                e, result_json
+            ))
+        }
     };
 
     if let Some(obj) = parsed_json.as_object_mut() {
-        obj.insert("settings.lang_custom_display".to_string(), serde_json::Value::String(custom_display));
+        obj.insert(
+            "settings.lang_custom_display".to_string(),
+            serde_json::Value::String(custom_display),
+        );
     }
-    
+
     let final_result = serde_json::to_string_pretty(&parsed_json).unwrap_or(result_json.clone());
 
     let key = format!("locales:{}.json", target_lang);
@@ -470,7 +496,11 @@ pub async fn list_vault_keys(state: State<'_, AgentState>) -> Result<Vec<String>
 }
 
 #[tauri::command]
-pub async fn set_vault_secret(state: State<'_, AgentState>, key: String, value: String) -> Result<(), String> {
+pub async fn set_vault_secret(
+    state: State<'_, AgentState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
     if value.trim().is_empty() {
         return Err("Value cannot be empty.".into());
     }

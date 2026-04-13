@@ -38,7 +38,9 @@ impl TelegramTool {
                 diagrams.push(code.as_str().to_string());
             }
         }
-        let clean_text = re.replace_all(message, "🎨 [Mermaid Diagram Attached]").to_string();
+        let clean_text = re
+            .replace_all(message, "🎨 [Mermaid Diagram Attached]")
+            .to_string();
 
         let mut final_status = "Telegram message sent successfully.".to_string();
 
@@ -63,11 +65,17 @@ impl TelegramTool {
                     if let Ok(compressed) = encoder.finish() {
                         let encoded = general_purpose::URL_SAFE.encode(&compressed);
                         let kroki_url = format!("https://kroki.io/mermaid/png/{}", encoded);
-                        
-                        // We download the bytes manually into memory to avoid Url type incompatibilities 
+
+                        // We download the bytes manually into memory to avoid Url type incompatibilities
                         if let Ok(resp) = client.get(&kroki_url).send().await {
                             if let Ok(bytes) = resp.bytes().await {
-                                let _ = bot.send_photo(chat_id, InputFile::memory(bytes.to_vec()).file_name("diagram.png".to_string())).await;
+                                let _ = bot
+                                    .send_photo(
+                                        chat_id,
+                                        InputFile::memory(bytes.to_vec())
+                                            .file_name("diagram.png".to_string()),
+                                    )
+                                    .await;
                             }
                         }
                     }

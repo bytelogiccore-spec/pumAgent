@@ -133,7 +133,11 @@ impl Orchestrator {
                 if parts.len() == 2 {
                     if k_str.starts_with("rules:") {
                         let content = String::from_utf8_lossy(&val);
-                        rules_str.push_str(&format!("- RULE [{}]:\n{}\n\n", parts[1], content.trim()));
+                        rules_str.push_str(&format!(
+                            "- RULE [{}]:\n{}\n\n",
+                            parts[1],
+                            content.trim()
+                        ));
                         rules_count += 1;
                     } else if k_str.starts_with("skills:") || k_str.starts_with("workflows:") {
                         let content = String::from_utf8_lossy(&val);
@@ -141,7 +145,10 @@ impl Orchestrator {
                         if preview.len() > 100 {
                             preview = format!("{}...", &preview[..100]);
                         }
-                        modules_str.push_str(&format!("- Domain: {}, Name: {} (Preview: {})\n", parts[0], parts[1], preview));
+                        modules_str.push_str(&format!(
+                            "- Domain: {}, Name: {} (Preview: {})\n",
+                            parts[0], parts[1], preview
+                        ));
                         modules_count += 1;
                     }
                 }

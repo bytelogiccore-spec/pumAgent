@@ -1,8 +1,8 @@
 use chrono::{DateTime, Local, Utc};
 use dbx_core::Database;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ScheduleConfig {
@@ -86,8 +86,12 @@ impl Scheduler {
                                             } else {
                                                 should_run = true; // Run immediately to set baseline
                                             }
-                                            if let Some(next_upcoming) = cron.upcoming(Local).next() {
-                                                next_exec = format!("{} (Cron)", next_upcoming.format("%Y-%m-%d %H:%M:%S"));
+                                            if let Some(next_upcoming) = cron.upcoming(Local).next()
+                                            {
+                                                next_exec = format!(
+                                                    "{} (Cron)",
+                                                    next_upcoming.format("%Y-%m-%d %H:%M:%S")
+                                                );
                                             }
                                         } else {
                                             next_exec = "Cron Syntax Error".to_string();
@@ -98,12 +102,20 @@ impl Scheduler {
                                             if diff >= interval as i64 {
                                                 should_run = true;
                                             }
-                                            let next = last + chrono::Duration::seconds(interval as i64);
-                                            next_exec = next.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S").to_string();
+                                            let next =
+                                                last + chrono::Duration::seconds(interval as i64);
+                                            next_exec = next
+                                                .with_timezone(&Local)
+                                                .format("%Y-%m-%d %H:%M:%S")
+                                                .to_string();
                                         } else {
                                             should_run = true;
-                                            let next = now + chrono::Duration::seconds(interval as i64);
-                                            next_exec = next.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S").to_string();
+                                            let next =
+                                                now + chrono::Duration::seconds(interval as i64);
+                                            next_exec = next
+                                                .with_timezone(&Local)
+                                                .format("%Y-%m-%d %H:%M:%S")
+                                                .to_string();
                                         }
                                     }
                                 }

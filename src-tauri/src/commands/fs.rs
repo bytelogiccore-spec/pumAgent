@@ -1,5 +1,5 @@
-use crate::AgentState;
 use crate::config::AppConfig;
+use crate::AgentState;
 use serde::Serialize;
 use std::fs;
 use tauri::State;
@@ -17,7 +17,6 @@ pub struct KbQuotaResult {
     pub skills: QuotaUsage,
     pub workflows: QuotaUsage,
 }
-
 
 #[tauri::command]
 pub fn list_logs(state: State<'_, AgentState>) -> Result<Vec<String>, String> {
@@ -67,13 +66,24 @@ pub fn list_knowledge(domain: String, state: State<'_, AgentState>) -> Result<Ve
     Ok(files)
 }
 
-
 #[tauri::command]
 pub fn get_knowledge_quota(state: State<'_, AgentState>) -> Result<KbQuotaResult, String> {
     let config = AppConfig::load(&state.base_dir);
-    let mut rules = QuotaUsage { count: 0, approx_tokens: 0, limit: config.kb_rules_token_limit };
-    let mut skills = QuotaUsage { count: 0, approx_tokens: 0, limit: config.kb_skills_token_limit };
-    let mut workflows = QuotaUsage { count: 0, approx_tokens: 0, limit: config.kb_skills_token_limit };
+    let mut rules = QuotaUsage {
+        count: 0,
+        approx_tokens: 0,
+        limit: config.kb_rules_token_limit,
+    };
+    let mut skills = QuotaUsage {
+        count: 0,
+        approx_tokens: 0,
+        limit: config.kb_skills_token_limit,
+    };
+    let mut workflows = QuotaUsage {
+        count: 0,
+        approx_tokens: 0,
+        limit: config.kb_skills_token_limit,
+    };
 
     if let Ok(entries) = state.db.scan("knowledge_base") {
         for (key, val) in entries {
@@ -97,7 +107,11 @@ pub fn get_knowledge_quota(state: State<'_, AgentState>) -> Result<KbQuotaResult
         }
     }
 
-    Ok(KbQuotaResult { rules, skills, workflows })
+    Ok(KbQuotaResult {
+        rules,
+        skills,
+        workflows,
+    })
 }
 #[tauri::command]
 pub fn read_knowledge(

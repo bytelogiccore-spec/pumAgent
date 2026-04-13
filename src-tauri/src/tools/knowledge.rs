@@ -43,7 +43,7 @@ impl KnowledgeTool {
         if files.is_empty() {
             return Ok(format!("No items found in {}.", domain));
         }
-        
+
         let mut output = format!("Found {} items in {}:\n", files.len(), domain);
         for file in files {
             output.push_str(&format!("- {}\n", file));

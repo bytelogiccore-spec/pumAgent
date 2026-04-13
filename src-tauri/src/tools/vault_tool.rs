@@ -1,8 +1,8 @@
 use crate::agent::multi_agent::ToolResult;
 use keyring::Entry;
 
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 pub struct VaultTool {
     base_dir: PathBuf,
@@ -55,7 +55,9 @@ impl VaultTool {
 
     pub fn delete_secret(&self, key: &str) -> Result<(), String> {
         let entry = Entry::new("PumAgentVault", key).map_err(|e| e.to_string())?;
-        entry.delete_credential().map_err(|e: keyring::Error| e.to_string())?;
+        entry
+            .delete_credential()
+            .map_err(|e: keyring::Error| e.to_string())?;
         self.remove_from_index(key);
         Ok(())
     }

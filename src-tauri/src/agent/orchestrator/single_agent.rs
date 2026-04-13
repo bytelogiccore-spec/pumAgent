@@ -146,7 +146,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 }
                 tasks_md.push_str("\nAGENT, please execute the required tool calls to satisfy these scheduled tasks.");
 
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.injected_scheduled_task", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.injected_scheduled_task", "args": {}})
+                    ))
+                    .await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: tasks_md,
@@ -154,7 +159,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 });
             }
 
-            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_waiting", "args": {"step": loop_count}}))).await;
+            let _ = log_tx
+                .send(format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "log.llm_waiting", "args": {"step": loop_count}})
+                ))
+                .await;
 
             let mut response_res = self
                 .get_llm_client_by_id(&active_worker_id)
@@ -184,7 +194,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 Ok(res) => res,
                 Err(e) => {
                     let err_msg = format!("Final LLM Failure: {}", e);
-                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}}))).await;
+                    let _ = log_tx
+                        .send(format!(
+                            "i18n:{}",
+                            serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}})
+                        ))
+                        .await;
                     return Err(err_msg);
                 }
             };
@@ -259,7 +274,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 ));
             }
 
-            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tools_injected", "args": {}}))).await;
+            let _ = log_tx
+                .send(format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "log.tools_injected", "args": {}})
+                ))
+                .await;
 
             // Inject the result as user system feedback
             history.push(ChatMessage {
@@ -283,9 +303,6 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
         }
 
         self.save_transcript(session_id, &history);
-        Ok((
-            "Agent Terminated without Conclusion.".to_string(),
-            history,
-        ))
+        Ok(("Agent Terminated without Conclusion.".to_string(), history))
     }
 }

@@ -10,7 +10,10 @@ impl super::Orchestrator {
         log_tx: mpsc::Sender<String>,
     ) {
         let _ = log_tx
-            .send(format!("i18n:{}", serde_json::json!({"key": "log.reflector_start", "args": {}})))
+            .send(format!(
+                "i18n:{}",
+                serde_json::json!({"key": "log.reflector_start", "args": {}})
+            ))
             .await;
 
         let system_msg = ChatMessage {
@@ -51,7 +54,10 @@ impl super::Orchestrator {
         let ai_text = reflector_res.content.clone();
         if ai_text.trim() == "NO_MEMORY_NEEDED" {
             let _ = log_tx
-                .send(format!("i18n:{}", serde_json::json!({"key": "log.reflector_no_memory", "args": {}})))
+                .send(format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "log.reflector_no_memory", "args": {}})
+                ))
                 .await;
             return;
         }
@@ -59,7 +65,10 @@ impl super::Orchestrator {
         let tool_calls = extract_json_blocks(&ai_text);
         if tool_calls.is_empty() {
             let _ = log_tx
-                .send(format!("i18n:{}", serde_json::json!({"key": "log.reflector_no_tools", "args": {}})))
+                .send(format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "log.reflector_no_tools", "args": {}})
+                ))
                 .await;
             return;
         }
@@ -86,7 +95,10 @@ impl super::Orchestrator {
 
         // Optionally, log results
         let _ = log_tx
-            .send(format!("i18n:{}", serde_json::json!({"key": "log.reflector_done", "args": {}})))
+            .send(format!(
+                "i18n:{}",
+                serde_json::json!({"key": "log.reflector_done", "args": {}})
+            ))
             .await;
     }
 }

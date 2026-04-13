@@ -108,7 +108,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
         loop {
             if cancel_flag.load(Ordering::Relaxed) {
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.agent_stopped_by_user", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.agent_stopped_by_user", "args": {}})
+                    ))
+                    .await;
                 return Ok(("[USER_STOPPED]".to_string(), history));
             }
 
@@ -132,7 +137,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 }
                 tasks_md.push_str("\nPLANNER, please execute the required tool calls to satisfy these scheduled tasks.");
 
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.injected_scheduled_task", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.injected_scheduled_task", "args": {}})
+                    ))
+                    .await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: tasks_md,
@@ -140,7 +150,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 });
             }
 
-            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_planning", "args": {"step": loop_count}}))).await;
+            let _ = log_tx
+                .send(format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "log.planner_planning", "args": {"step": loop_count}})
+                ))
+                .await;
 
             let mut planner_res_result = self
                 .get_llm_client_by_id(&active_planner_id)
@@ -170,7 +185,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 Ok(r) => r,
                 Err(e) => {
                     let err_msg = format!("Planner LLM Final Failure: {}", e);
-                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}}))).await;
+                    let _ = log_tx
+                        .send(format!(
+                            "i18n:{}",
+                            serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}})
+                        ))
+                        .await;
                     return Err(err_msg);
                 }
             };
@@ -182,7 +202,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
                 // If it doesn't say "DONE", it means planner replied directly
                 if !text_res.to_uppercase().contains("DONE") {
-                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_direct_answer", "args": {}}))).await;
+                    let _ = log_tx
+                        .send(format!(
+                            "i18n:{}",
+                            serde_json::json!({"key": "log.planner_direct_answer", "args": {}})
+                        ))
+                        .await;
                     history.push(ChatMessage {
                         role: "assistant".to_string(),
                         content: text_res.to_string(),
@@ -192,7 +217,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     return Ok((Self::sanitize_output(text_res), history));
                 }
 
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_tools_done", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.planner_tools_done", "args": {}})
+                    ))
+                    .await;
                 // Run Writer Agent
                 let fallback_writer_prompt_string = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}. If the user merely sent a standard greeting or simple chatter without requiring tool lookups, just reply naturally and conversationally.", lang_name);
                 let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt_string);
@@ -211,13 +241,23 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                         lang_name
                     ), images_base64: None });
 
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_writing", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.writer_writing", "args": {}})
+                    ))
+                    .await;
                 let mut writer_res_result = self
                     .get_llm_client_by_id(&active_writer_id)
                     .chat(&writer_history, 0.7)
                     .await;
                 if writer_res_result.is_err() {
-                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_fallback", "args": {}}))).await;
+                    let _ = log_tx
+                        .send(format!(
+                            "i18n:{}",
+                            serde_json::json!({"key": "log.writer_fallback", "args": {}})
+                        ))
+                        .await;
                     for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
                         writer_res_result = crate::agent::llm_client::LLMClient::new(
                             fallback_ep.api_url.clone(),
@@ -282,7 +322,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             }
 
             // Critic Agent Phase
-            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_validating", "args": {}}))).await;
+            let _ = log_tx
+                .send(format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "log.critic_validating", "args": {}})
+                ))
+                .await;
 
             let query = user_messages
                 .iter()
@@ -308,7 +353,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 .await;
 
             if critic_res_result.is_err() {
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_fallback", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.critic_fallback", "args": {}})
+                    ))
+                    .await;
                 for fallback_ep in self.get_fallback_endpoints(&active_critic_id) {
                     critic_res_result = crate::agent::llm_client::LLMClient::new(
                         fallback_ep.api_url.clone(),
@@ -338,7 +388,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             });
 
             if critic_res.content.contains("STATUS: PASS") {
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_pass", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.critic_pass", "args": {}})
+                    ))
+                    .await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: result_summary_md,
@@ -358,13 +413,23 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 writer_history.insert(0, writer_prompt);
                 writer_history.push(ChatMessage { role: "user".to_string(), content: format!("The user's request has been fulfilled or the data is ready. Please provide the final response to the user in {}. DO NOT unnecessarily repeat conversational history. Focus ONLY on what was just done or discovered.", lang_name), images_base64: None });
 
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_summarizing", "args": {}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.writer_summarizing", "args": {}})
+                    ))
+                    .await;
                 let mut writer_res_result = self
                     .get_llm_client_by_id(&active_writer_id)
                     .chat(&writer_history, 0.7)
                     .await;
                 if writer_res_result.is_err() {
-                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_fallback", "args": {}}))).await;
+                    let _ = log_tx
+                        .send(format!(
+                            "i18n:{}",
+                            serde_json::json!({"key": "log.writer_fallback", "args": {}})
+                        ))
+                        .await;
                     for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
                         writer_res_result = crate::agent::llm_client::LLMClient::new(
                             fallback_ep.api_url.clone(),
@@ -397,7 +462,12 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     .replace("STATUS: FAIL", "")
                     .trim()
                     .to_string();
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critic_fail", "args": {"feedback": fb}}))).await;
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.critic_fail", "args": {"feedback": fb}})
+                    ))
+                    .await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: format!("SYSTEM OBSERVATION RESULTS:\n{}\n\n[Critic Agent Feedback]\nYour last tool executed, but the task is not yet complete. Critic feedback: {}\nPlease use tools again with different strategies to fulfill the task.", result_summary_md, fb),

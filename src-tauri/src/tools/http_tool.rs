@@ -1,6 +1,6 @@
 use rquest::Client;
-use std::error::Error;
 use std::collections::HashMap;
+use std::error::Error;
 
 pub struct HttpTool {}
 
