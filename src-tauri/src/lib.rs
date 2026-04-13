@@ -131,6 +131,7 @@ pub fn run() {
             let telegram_tool = TelegramTool::new(base_dir.clone());
             let http_tool = crate::tools::http_tool::HttpTool::new();
             let script_tool = crate::tools::scripting_tool::ScriptingTool::new();
+            let moltbook_tool = crate::tools::moltbook_tool::MoltbookTool::new(base_dir.clone());
 
             let state = AgentState {
                 multi_agent: Arc::new(MultiAgent::new(
@@ -142,6 +143,7 @@ pub fn run() {
                     telegram_tool,
                     http_tool,
                     script_tool,
+                    moltbook_tool,
                 )),
                 base_dir: base_dir.clone(),
                 cancel_flag: Arc::new(AtomicBool::new(false)),

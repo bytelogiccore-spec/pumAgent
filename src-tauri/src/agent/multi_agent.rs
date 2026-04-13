@@ -11,6 +11,7 @@ use crate::tools::telegram_tool::TelegramTool;
 use crate::tools::terminal::TerminalTool;
 use crate::tools::http_tool::HttpTool;
 use crate::tools::scripting_tool::ScriptingTool;
+use crate::tools::moltbook_tool::MoltbookTool;
 
 pub struct MultiAgent {
     crawler: Arc<Crawler>,
@@ -21,6 +22,7 @@ pub struct MultiAgent {
     telegram_tool: Arc<TelegramTool>,
     http_tool: Arc<HttpTool>,
     script_tool: Arc<ScriptingTool>,
+    moltbook_tool: Arc<MoltbookTool>,
 }
 
 pub struct ToolResult {
@@ -40,6 +42,7 @@ impl MultiAgent {
         telegram_tool: TelegramTool,
         http_tool: HttpTool,
         script_tool: ScriptingTool,
+        moltbook_tool: MoltbookTool,
     ) -> Self {
         MultiAgent {
             crawler: Arc::new(crawler),
@@ -50,6 +53,7 @@ impl MultiAgent {
             telegram_tool: Arc::new(telegram_tool),
             http_tool: Arc::new(http_tool),
             script_tool: Arc::new(script_tool),
+            moltbook_tool: Arc::new(moltbook_tool),
         }
     }
 
@@ -97,6 +101,7 @@ impl MultiAgent {
             let telegram_tool = Arc::clone(&self.telegram_tool);
             let http_tool = Arc::clone(&self.http_tool);
             let script_tool = Arc::clone(&self.script_tool);
+            let moltbook_tool = Arc::clone(&self.moltbook_tool);
 
             let llm_clone = llm.clone();
             let registry_prompt_clone = registry_prompt.clone();
@@ -115,6 +120,7 @@ impl MultiAgent {
                     "telegram" => telegram_tool.execute_action(tool, action, args).await,
                     "http" => http_tool.execute_action(tool, action, args).await,
                     "scripting" => script_tool.execute_action(tool, action, args).await,
+                    "moltbook" => moltbook_tool.execute_action(tool, action, args).await,
                     _ => ToolResult {
                         tool_name: tool,
                         action,
@@ -157,6 +163,7 @@ mod tests {
         let telegram_tool = TelegramTool::new(std::path::PathBuf::from("."));
         let http_tool = crate::tools::http_tool::HttpTool::new();
         let script_tool = crate::tools::scripting_tool::ScriptingTool::new();
+        let moltbook_tool = crate::tools::moltbook_tool::MoltbookTool::new(std::path::PathBuf::from("."));
 
         let agent = MultiAgent::new(
             crawler,
@@ -167,6 +174,7 @@ mod tests {
             telegram_tool,
             http_tool,
             script_tool,
+            moltbook_tool,
         );
         let request = json!({
             "tool": "crawl4ai",
