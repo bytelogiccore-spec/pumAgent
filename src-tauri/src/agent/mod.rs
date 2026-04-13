@@ -4,3 +4,4 @@ pub mod orchestrator;
 pub mod parser;
 pub mod scheduler;
 pub mod telegram;
+pub mod approval;

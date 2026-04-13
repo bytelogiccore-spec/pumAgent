@@ -107,6 +107,44 @@ impl MultiAgent {
             let registry_prompt_clone = registry_prompt.clone();
 
             let handle = task::spawn(async move {
+                let mut require_approval = false;
+                let mut cmd_preview = String::new();
+
+                if tool == "terminal" || tool == "scripting" || tool == "http" {
+                    let cmd_str = args
+                        .get("command")
+                        .or_else(|| args.get("code"))
+                        .or_else(|| args.get("url"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let ds = cmd_str.to_lowercase();
+                    if ds.contains("rm ") 
+                        || ds.contains("del ") 
+                        || ds.contains("remove-item")
+                        || ds.contains("format ") 
+                        || ds.contains("curl") 
+                        || ds.contains("wget") 
+                        || ds.contains("sudo") 
+                        || ds.contains("drop")
+                        || tool == "http" 
+                    {
+                        require_approval = true;
+                        cmd_preview = format!("Tool: {} \nPayload: {}", tool, cmd_str);
+                    }
+                }
+
+                if require_approval {
+                    let approved = crate::agent::approval::request_approval(&telegram_tool, &cmd_preview).await;
+                    if !approved {
+                        return ToolResult {
+                            tool_name: tool,
+                            action,
+                            ok: false,
+                            output: "[SECURITY LOCK] User rejected execution of this command.".to_string(),
+                        };
+                    }
+                }
+
                 match tool.as_str() {
                     "crawl4ai" => crawler.execute_action(tool, action, args).await,
                     "search" => search_tool.execute_action(tool, action, args).await,

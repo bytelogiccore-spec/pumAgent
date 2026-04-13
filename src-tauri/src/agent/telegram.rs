@@ -57,6 +57,23 @@ pub async fn start_telegram_bot(
             if let Some(text) = msg.text() {
                 log::info!("Telegram Recv: {}", text);
 
+                if text.starts_with("/approve ") || text.starts_with("/reject ") {
+                    let parts: Vec<&str> = text.split_whitespace().collect();
+                    if parts.len() == 2 {
+                        let id = parts[1];
+                        let is_approve = text.starts_with("/approve");
+                        let mut map = crate::agent::approval::pending_approvals().lock().await;
+                        if let Some(tx) = map.remove(id) {
+                            let _ = tx.send(is_approve);
+                            let resp_msg = if is_approve { "✅ Execution Approved." } else { "❌ Execution Rejected." };
+                            let _ = bot.send_message(msg.chat.id, resp_msg).await;
+                        } else {
+                            let _ = bot.send_message(msg.chat.id, "⚠️ Invalid or expired approval ID.").await;
+                        }
+                        return respond(());
+                    }
+                }
+
                 let incoming_chat_id = msg.chat.id.to_string();
                 if config.telegram_chat_id != incoming_chat_id {
                     log::info!("Updating telegram_chat_id to {}", incoming_chat_id);
