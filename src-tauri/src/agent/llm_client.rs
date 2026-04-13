@@ -133,7 +133,8 @@ impl LLMClient {
                                 "status": response.status().as_u16()
                             }
                         })
-                    ).into());
+                    )
+                    .into());
                 }
                 retries += 1;
                 log::warn!(
@@ -156,7 +157,8 @@ impl LLMClient {
                             "key": "err.vision_not_supported",
                             "args": {}
                         })
-                    ).into());
+                    )
+                    .into());
                 }
 
                 return Err(format!(
@@ -168,7 +170,8 @@ impl LLMClient {
                             "text": text
                         }
                     })
-                ).into());
+                )
+                .into());
             }
         };
 
@@ -188,9 +191,16 @@ impl LLMClient {
         if let Some(tool_calls) = msg_obj.get("tool_calls").and_then(|t| t.as_array()) {
             for call in tool_calls {
                 if let Some(func) = call.get("function") {
-                    let tool_name = func.get("name").and_then(|n| n.as_str()).unwrap_or_default();
-                    let args_str = func.get("arguments").and_then(|a| a.as_str()).unwrap_or("{}");
-                    if let Ok(mut parsed_args) = serde_json::from_str::<serde_json::Value>(args_str) {
+                    let tool_name = func
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or_default();
+                    let args_str = func
+                        .get("arguments")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("{}");
+                    if let Ok(mut parsed_args) = serde_json::from_str::<serde_json::Value>(args_str)
+                    {
                         if let Some(obj) = parsed_args.as_object_mut() {
                             obj.insert("tool".to_string(), serde_json::json!(tool_name));
                             native_tool_calls.push(parsed_args);

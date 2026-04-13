@@ -71,7 +71,10 @@ impl super::Orchestrator {
                     ))
                     .await;
                 return Ok((
-                    format!("i18n:{}", serde_json::json!({"key": "chat.agent_stopped", "args": {}})),
+                    format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "chat.agent_stopped", "args": {}})
+                    ),
                     history,
                 ));
             }
@@ -109,15 +112,12 @@ impl super::Orchestrator {
                 });
             }
 
-            let planner_res = self.run_planner_phase(
-                &history,
-                &mut active_planner_id,
-                &log_tx,
-                loop_count,
-            ).await?;
+            let planner_res = self
+                .run_planner_phase(&history, &mut active_planner_id, &log_tx, loop_count)
+                .await?;
 
             let mut json_blocks = planner_res.native_tool_calls.clone();
-            
+
             // AI Hallucination Fallback: If native processing yields 0 tools but there's a JSON block
             if json_blocks.is_empty() {
                 json_blocks = extract_json_blocks(&planner_res.content);
@@ -150,14 +150,17 @@ impl super::Orchestrator {
                     ))
                     .await;
                 // Run Writer Agent
-                let (writer_res, _) = self.run_writer_phase(
-                    writer_prompt_opt,
-                    &lang_display,
-                    history.clone(),
-                    &mut active_writer_id,
-                    &log_tx,
-                    true,
-                ).await.unwrap();
+                let (writer_res, _) = self
+                    .run_writer_phase(
+                        writer_prompt_opt,
+                        &lang_display,
+                        history.clone(),
+                        &mut active_writer_id,
+                        &log_tx,
+                        true,
+                    )
+                    .await
+                    .unwrap();
 
                 history.push(ChatMessage {
                     role: "assistant".to_string(),
@@ -203,14 +206,39 @@ impl super::Orchestrator {
                 ));
             }
 
+            // [Hard-Fail Fallback] Check if the agent called an entirely bogus tool
+            let mut critical_fail = None;
+            for r in &results {
+                if !r.ok && r.output.contains("Unknown tool") {
+                    critical_fail = Some(format!(
+                        "🤖 에이전트가 존재하지 않는 도구(`{}.{}`)를 호출하려다 중단되었습니다.\n\n*에러 원인: 현재 환경에서 해당 기능을 직접 수행할 수 있는 API가 없습니다. 프롬프트를 좀 더 구체적으로 변경하거나 다른 방식으로 지시해 주세요.*",
+                        r.tool_name, r.action
+                    ));
+                    break;
+                }
+            }
+            if let Some(fail_msg) = critical_fail {
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.critical_tool_failure", "args": {}}))).await;
+                history.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: fail_msg.clone(),
+                    images_base64: None,
+                });
+                self.save_transcript(session_id.clone(), &history);
+                return Ok((fail_msg, history));
+            }
+
             // Critic Agent Phase
-            let critic_res = self.run_critic_phase(
-                critic_prompt_opt,
-                &user_messages,
-                &result_summary_md,
-                &mut active_critic_id,
-                &log_tx,
-            ).await.unwrap();
+            let critic_res = self
+                .run_critic_phase(
+                    critic_prompt_opt,
+                    &user_messages,
+                    &result_summary_md,
+                    &mut active_critic_id,
+                    &log_tx,
+                )
+                .await
+                .unwrap();
 
             if critic_res.content.contains("STATUS: PASS") {
                 let _ = log_tx
@@ -226,14 +254,17 @@ impl super::Orchestrator {
                 });
 
                 // Run Writer Phase
-                let (writer_res, _) = self.run_writer_phase(
-                    writer_prompt_opt,
-                    &lang_display,
-                    history.clone(),
-                    &mut active_writer_id,
-                    &log_tx,
-                    false,
-                ).await.unwrap();
+                let (writer_res, _) = self
+                    .run_writer_phase(
+                        writer_prompt_opt,
+                        &lang_display,
+                        history.clone(),
+                        &mut active_writer_id,
+                        &log_tx,
+                        false,
+                    )
+                    .await
+                    .unwrap();
 
                 history.push(ChatMessage {
                     role: "assistant".to_string(),
@@ -264,7 +295,10 @@ impl super::Orchestrator {
 
         self.save_transcript(session_id.clone(), &history);
         Ok((
-            format!("i18n:{}", serde_json::json!({"key": "chat.agent_terminated", "args": {}})),
+            format!(
+                "i18n:{}",
+                serde_json::json!({"key": "chat.agent_terminated", "args": {}})
+            ),
             history,
         ))
     }

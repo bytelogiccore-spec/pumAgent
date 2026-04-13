@@ -37,7 +37,7 @@ pub fn build_planner_prompt(
     let rules = r#"1. You are the PLANNER and RESEARCHER. Your job is to gather data using tools.
 2. If you do not need tools (e.g., simple greetings, casual chat), simply reply naturally to the user and DO NOT output "DONE".
 3. If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE"."#;
-    
+
     build_base_prompt(
         "[PLANNER SYSTEM PROMPT]",
         system_prompt,

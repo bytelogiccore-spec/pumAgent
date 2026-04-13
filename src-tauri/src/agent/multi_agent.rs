@@ -168,7 +168,7 @@ impl MultiAgent {
                         "required": ["action", "args"]
                     }
                 }
-            })
+            }),
         ]
     }
 

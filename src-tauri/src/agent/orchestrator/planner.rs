@@ -34,9 +34,9 @@ impl super::Orchestrator {
                     fallback_ep.model.clone(),
                     fallback_ep.api_key.clone(),
                 )
-                    .with_tools(tools_schema.clone())
-                    .chat(history, 0.7)
-                    .await;
+                .with_tools(tools_schema.clone())
+                .chat(history, 0.7)
+                .await;
                 if planner_res_result.is_ok() {
                     *active_planner_id = fallback_ep.id.clone();
                     let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;

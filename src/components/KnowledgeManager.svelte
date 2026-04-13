@@ -59,58 +59,66 @@
   });
 </script>
 
-<div style="flex: 1; display: flex; flex-direction: row; overflow: hidden;">
-  {#if appState.showSysSidebar}
-    <div class="sys-sidebar">
-      {#if appState.sysModalDomain !== "logs"}
-        <div style="display: flex; gap: 8px; margin-bottom: 8px; padding: 0 16px;">
-          <button class="sys-create-btn" style="flex: 1; margin: 0; width: auto;" onclick={createSysItem}>{t("knowledge.create")}</button>
-          {#if appState.sysModalItems.length > 0}
-            <button class="sys-create-btn sys-danger" style="flex: none; margin: 0; width: auto; padding: 0 12px; font-weight: bold; font-size: 1.1em" onclick={deleteAllSysItems} title={t("knowledge.deleteAll")}>🗑</button>
+<div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fcfbf8; height: 100%;">
+  {#if !appState.viewingItemName}
+    <!-- LIST VIEW -->
+    <div style="flex: 1; display: flex; flex-direction: column; padding: 24px; overflow: hidden;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div style="font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; color: #1a1a1a;">
+          {appState.sysModalTitle}
+        </div>
+        <div style="display: flex; gap: 8px;">
+          {#if appState.sysModalDomain !== "logs"}
+            <button class="sys-save-btn" style="background:#fcfbf8; color:#1a1a1a; border:1px solid #1a1a1a;" onclick={createSysItem}>{t("knowledge.create")}</button>
           {/if}
+          {#if appState.sysModalDomain === "logs" && appState.selectedLogs.length > 0}
+            <button class="sys-save-btn sys-danger" onclick={deleteSelectedLogs}>{t("knowledge.deleteSelected", { count: appState.selectedLogs.length })}</button>
+          {/if}
+          {#if appState.sysModalItems.length > 0}
+            <button class="sys-save-btn sys-danger" onclick={deleteAllSysItems} title={t("knowledge.deleteAll")}>🗑 {t("knowledge.deleteAll")}</button>
+          {/if}
+        </div>
+      </div>
+
+      {#if appState.sysModalItems.length === 0}
+        <div style="color: #a1a1aa; font-style: italic; display: flex; justify-content: center; align-items: center; flex: 1;">
+          {t("knowledge.empty")}
         </div>
       {:else}
-        <div style="display: flex; gap: 8px; margin-bottom: 8px; padding: 0 16px;">
-        {#if appState.selectedLogs.length > 0}
-          <button class="sys-create-btn sys-danger" style="flex: 1; margin: 0; width: auto; font-weight: bold;" onclick={deleteSelectedLogs}>{t("knowledge.deleteSelected", { count: appState.selectedLogs.length })}</button>
-        {/if}
-        {#if appState.sysModalItems.length > 0}
-          <button class="sys-create-btn sys-danger" style="flex: none; margin: 0; width: auto; padding: 0 12px; font-weight: bold; font-size: 1.1em" onclick={deleteAllSysItems} title={t("knowledge.deleteAll")}>🗑</button>
-        {/if}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; overflow-y: auto; align-content: start; padding-right: 8px; padding-bottom: 24px;">
+          {#each appState.sysModalItems as item}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="list-item-card" ondblclick={() => loadSysItem(item.name)}>
+              {#if appState.sysModalDomain === "logs"}
+                <input
+                  type="checkbox"
+                  style="margin-right: 12px; transform: scale(1.2); cursor: pointer;"
+                  checked={appState.selectedLogs.includes(item.name)}
+                  onchange={(e) => {
+                    let target = e.target as HTMLInputElement;
+                    if (target.checked) appState.selectedLogs = [...appState.selectedLogs, item.name];
+                    else appState.selectedLogs = appState.selectedLogs.filter((n: string) => n !== item.name);
+                  }}
+                  onclick={(e) => e.stopPropagation()}
+                />
+              {/if}
+              <div style="flex: 1; font-weight: 500; color: #1a1a1a; cursor: default; user-select: none; word-break: break-all; font-size: 1rem;">
+                📄 {item.name}
+              </div>
+              {#if appState.sysModalDomain !== "logs"}
+                <button class="sys-del" onclick={(e) => { e.stopPropagation(); deleteSysItem(item.name); }} title="Delete">🗑</button>
+              {/if}
+            </div>
+          {/each}
         </div>
       {/if}
-      {#if appState.sysModalItems.length === 0}
-        <div style="padding:10px; color:#a1a1aa; font-size:0.85rem">{t("knowledge.empty")}</div>
-      {/if}
-      {#each appState.sysModalItems as item}
-        <div class="sys-item">
-          {#if appState.sysModalDomain === "logs"}
-            <input
-              type="checkbox"
-              style="margin-right: 8px;"
-              checked={appState.selectedLogs.includes(item.name)}
-              onchange={(e) => {
-                let target = e.target as HTMLInputElement;
-                if (target.checked) appState.selectedLogs = [...appState.selectedLogs, item.name];
-                else appState.selectedLogs = appState.selectedLogs.filter((n: string) => n !== item.name);
-              }}
-            />
-          {/if}
-          <button class="sys-link" onclick={() => loadSysItem(item.name)}>{item.name}</button>
-          {#if appState.sysModalDomain !== "logs"}
-            <button class="sys-del" onclick={() => deleteSysItem(item.name)}>🗑</button>
-          {/if}
-        </div>
-      {/each}
     </div>
-  {/if}
-  <div class="sys-content">
-    {#if appState.viewingItemContent === null}
-      <div class="sys-placeholder">{t("knowledge.placeholder")}</div>
-    {:else}
+  {:else}
+    <!-- DETAIL VIEW -->
+    <div class="sys-content" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0;">
       <div class="sys-content-header">
         <div style="display:flex; align-items:center; gap: 12px;">
-          <button class="sys-save-btn" onclick={() => (appState.showSysSidebar = !appState.showSysSidebar)} style="background:transparent; color:#1a1a1a; border:1px solid #1a1a1a; padding: 4px 8px; text-transform:none;">{appState.showSysSidebar ? t("knowledge.hideList") : t("knowledge.showList")}</button>
+          <button class="sys-save-btn" onclick={() => { appState.viewingItemName = null; appState.viewingItemContent = null; }} style="background:transparent; color:#1a1a1a; border:1px solid #1a1a1a; padding: 4px 12px; text-transform:none;">← Back</button>
           <div style="font-weight:600;">{appState.viewingItemName}</div>
         </div>
         {#if ["skills", "rules", "workflows", "brain", "schedules", "vault"].includes(appState.sysModalDomain)}
@@ -165,59 +173,41 @@
       {:else}
         <textarea class="sys-textarea" bind:value={appState.viewingItemContent} placeholder={appState.sysModalDomain === "vault" ? "Enter the new secret password here (will not be retrievable after saving)" : t("knowledge.ph_edit_content")} readonly={!["skills", "rules", "workflows", "brain", "schedules", "vault"].includes(appState.sysModalDomain)}></textarea>
       {/if}
-    {/if}
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
-  .sys-sidebar {
-    width: 250px;
-    min-width: 250px;
-    flex-shrink: 0;
-    background: #f0ede1;
-    border-right: 1px solid #1a1a1a;
-    overflow-y: auto;
-    padding: 12px 0;
-  }
-
-  .sys-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 16px;
-    border-bottom: 1px solid #ebebeb;
-    flex-shrink: 0;
-  }
-  .sys-item:hover {
-    background: #ebe8de;
-  }
-  .sys-link {
-    background: none;
-    border: none;
-    color: #1a1a1a;
-    font-size: 0.95rem;
-    text-align: left;
-    cursor: pointer;
-    flex: 1;
-    min-width: 0;
-    padding: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
   .sys-del {
     background: none;
     border: none;
     color: #e0005a;
     font-size: 1.2rem;
     cursor: pointer;
-    opacity: 0.85;
+    opacity: 0.5;
     padding: 6px;
     transition: all 0.2s ease;
   }
   .sys-del:hover {
     opacity: 1;
     transform: scale(1.2);
+  }
+  .list-item-card {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    padding: 16px 20px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  .list-item-card:hover {
+    border-color: #1a1a1a;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+  .list-item-card:active {
+    transform: scale(0.98);
   }
   .sys-create-btn {
     background: #fcfbf8;
@@ -250,6 +240,8 @@
     flex-direction: column;
     padding: 0;
     background: #fcfbf8;
+    overflow: hidden;
+    min-height: 0;
   }
   .sys-content-header {
     display: flex;

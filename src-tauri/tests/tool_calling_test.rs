@@ -24,7 +24,7 @@ async fn test_comprehensive_native_tool_calling() {
                     "type": "object",
                     "properties": {
                         "action": { "type": "string", "enum": ["send_message"] },
-                        "args": { 
+                        "args": {
                             "type": "object",
                             "properties": {
                                 "message": { "type": "string" }
@@ -44,7 +44,7 @@ async fn test_comprehensive_native_tool_calling() {
                     "type": "object",
                     "properties": {
                         "action": { "type": "string", "enum": ["scrape"] },
-                        "args": { 
+                        "args": {
                             "type": "object",
                             "properties": {
                                 "url": { "type": "string", "description": "The valid web URL to parse." }
@@ -64,7 +64,7 @@ async fn test_comprehensive_native_tool_calling() {
                     "type": "object",
                     "properties": {
                         "action": { "type": "string", "enum": ["execute"] },
-                        "args": { 
+                        "args": {
                             "type": "object",
                             "properties": {
                                 "command": { "type": "string", "description": "The PowerShell command to run." }
@@ -84,7 +84,7 @@ async fn test_comprehensive_native_tool_calling() {
                     "type": "object",
                     "properties": {
                         "action": { "type": "string", "enum": ["run_node", "run_rhai"] },
-                        "args": { 
+                        "args": {
                             "type": "object",
                             "properties": {
                                 "code": { "type": "string", "description": "The logic code to execute natively." }
@@ -94,7 +94,7 @@ async fn test_comprehensive_native_tool_calling() {
                     "required": ["action", "args"]
                 }
             }
-        })
+        }),
     ];
 
     let system_prompt = ChatMessage {
@@ -108,12 +108,28 @@ async fn test_comprehensive_native_tool_calling() {
     {
         let messages = vec![
             system_prompt.clone(),
-            ChatMessage { role: "user".into(), content: "작업이 다 끝났다고 텔레그램으로 메시지 하나만 쏴줘!".into(), images_base64: None }
+            ChatMessage {
+                role: "user".into(),
+                content: "작업이 다 끝났다고 텔레그램으로 메시지 하나만 쏴줘!".into(),
+                images_base64: None,
+            },
         ];
 
-        let response = client.with_tools(tools_schema.clone()).chat(&messages, 0.7).await.expect("LLM 통신 실패");
-        let has_tool = response.native_tool_calls.iter().any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("telegram"));
-        assert!(has_tool, "LLM failed to invoke 'telegram'. Raw native calls: {:?}", response.native_tool_calls);
+        let response = client
+            .clone()
+            .with_tools(tools_schema.clone())
+            .chat(&messages, 0.7)
+            .await
+            .expect("LLM 통신 실패");
+        let has_tool = response
+            .native_tool_calls
+            .iter()
+            .any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("telegram"));
+        assert!(
+            has_tool,
+            "LLM failed to invoke 'telegram'. Raw native calls: {:?}",
+            response.native_tool_calls
+        );
         println!("✅ Telegram 툴 콜링 확인 완료.");
     }
 
@@ -122,12 +138,28 @@ async fn test_comprehensive_native_tool_calling() {
     {
         let messages = vec![
             system_prompt.clone(),
-            ChatMessage { role: "user".into(), content: "https://news.ycombinator.com 사이트를 긁어와서 내용을 파악해볼래?".into(), images_base64: None }
+            ChatMessage {
+                role: "user".into(),
+                content: "https://news.ycombinator.com 사이트를 긁어와서 내용을 파악해볼래?".into(),
+                images_base64: None,
+            },
         ];
 
-        let response = client.with_tools(tools_schema.clone()).chat(&messages, 0.7).await.expect("LLM 통신 실패");
-        let has_tool = response.native_tool_calls.iter().any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("crawler"));
-        assert!(has_tool, "LLM failed to invoke 'crawler'. Raw native calls: {:?}", response.native_tool_calls);
+        let response = client
+            .clone()
+            .with_tools(tools_schema.clone())
+            .chat(&messages, 0.7)
+            .await
+            .expect("LLM 통신 실패");
+        let has_tool = response
+            .native_tool_calls
+            .iter()
+            .any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("crawler"));
+        assert!(
+            has_tool,
+            "LLM failed to invoke 'crawler'. Raw native calls: {:?}",
+            response.native_tool_calls
+        );
         println!("✅ Crawler 툴 콜링 확인 완료.");
     }
 
@@ -139,12 +171,24 @@ async fn test_comprehensive_native_tool_calling() {
             ChatMessage { role: "user".into(), content: "로컬 콘솔에 `ipconfig` 명령어를 치고, 반환되는 내역을 바탕으로 내 IP 주소를 찾아줘.".into(), images_base64: None }
         ];
 
-        let response = client.with_tools(tools_schema.clone()).chat(&messages, 0.7).await.expect("LLM 통신 실패");
-        let has_tool = response.native_tool_calls.iter().any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("terminal"));
-        assert!(has_tool, "LLM failed to invoke 'terminal'. Raw native calls: {:?}", response.native_tool_calls);
+        let response = client
+            .clone()
+            .with_tools(tools_schema.clone())
+            .chat(&messages, 0.7)
+            .await
+            .expect("LLM 통신 실패");
+        let has_tool = response
+            .native_tool_calls
+            .iter()
+            .any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("terminal"));
+        assert!(
+            has_tool,
+            "LLM failed to invoke 'terminal'. Raw native calls: {:?}",
+            response.native_tool_calls
+        );
         println!("✅ Terminal 툴 콜링 확인 완료.");
     }
-    
+
     // 시나리오 4: 스크립트 실행(Scripting) 툴 호출 테스트
     println!("\n[Scenario 4] Scripting engine invocation");
     {
@@ -153,9 +197,21 @@ async fn test_comprehensive_native_tool_calling() {
             ChatMessage { role: "user".into(), content: "Node.js 엔진을 써서 1부터 100까지 더하는 스크립트를 즉석에서 실행하고 결과를 알려줘.".into(), images_base64: None }
         ];
 
-        let response = client.with_tools(tools_schema.clone()).chat(&messages, 0.7).await.expect("LLM 통신 실패");
-        let has_tool = response.native_tool_calls.iter().any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("scripting"));
-        assert!(has_tool, "LLM failed to invoke 'scripting'. Raw native calls: {:?}", response.native_tool_calls);
+        let response = client
+            .clone()
+            .with_tools(tools_schema.clone())
+            .chat(&messages, 0.7)
+            .await
+            .expect("LLM 통신 실패");
+        let has_tool = response
+            .native_tool_calls
+            .iter()
+            .any(|call| call.get("tool").and_then(|v| v.as_str()) == Some("scripting"));
+        assert!(
+            has_tool,
+            "LLM failed to invoke 'scripting'. Raw native calls: {:?}",
+            response.native_tool_calls
+        );
         println!("✅ Scripting 툴 콜링 확인 완료.");
     }
 

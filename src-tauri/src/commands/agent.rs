@@ -254,7 +254,13 @@ pub async fn execute_background_scheduler(
             if msg.starts_with("i18n:") {
                 let _ = app_clone.emit("tool_log", msg);
             } else {
-                let _ = app_clone.emit("tool_log", format!("i18n:{}", serde_json::json!({"key": "log.sys_background", "args": {"msg": msg}})));
+                let _ = app_clone.emit(
+                    "tool_log",
+                    format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.sys_background", "args": {"msg": msg}})
+                    ),
+                );
             }
         }
     });
@@ -358,6 +364,37 @@ pub fn save_config(config: AppConfig, state: State<'_, AgentState>) -> Result<()
 #[tauri::command]
 pub fn flush_db(state: State<'_, AgentState>) -> Result<(), String> {
     state.db.flush().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_terminal_blocklist(state: State<'_, AgentState>) -> Result<String, String> {
+    match state.db.get("config", b"terminal_blocklist") {
+        Ok(Some(bytes)) => {
+            let json_str = String::from_utf8(bytes).unwrap_or_default();
+            if let Ok(arr) = serde_json::from_str::<Vec<String>>(&json_str) {
+                Ok(arr.join(", "))
+            } else {
+                Ok("".to_string())
+            }
+        }
+        _ => Ok("".to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn save_terminal_blocklist(csv: String, state: State<'_, AgentState>) -> Result<(), String> {
+    let arr: Vec<String> = csv
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let json_str = serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string());
+    state
+        .db
+        .insert("config", b"terminal_blocklist", json_str.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let _ = state.db.flush();
+    Ok(())
 }
 
 #[tauri::command]

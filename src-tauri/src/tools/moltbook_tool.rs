@@ -29,13 +29,19 @@ impl MoltbookTool {
             if let Ok(creds) = serde_json::from_str::<MoltbookCreds>(&data) {
                 return creds;
             } else if !data.trim().is_empty() && !data.trim().starts_with('{') {
-                return MoltbookCreds { api_key: Some(data.trim().to_string()), agent_name: None };
+                return MoltbookCreds {
+                    api_key: Some(data.trim().to_string()),
+                    agent_name: None,
+                };
             }
         }
 
         // Try Environment Variable (Useful for CI/CD or Isolated Tests)
         if let Ok(env_key) = std::env::var("MOLTBOOK_API_KEY") {
-            return MoltbookCreds { api_key: Some(env_key), agent_name: None };
+            return MoltbookCreds {
+                api_key: Some(env_key),
+                agent_name: None,
+            };
         }
 
         // Fallback or legacy file check
@@ -45,7 +51,10 @@ impl MoltbookTool {
                 self.save_credentials(&creds);
                 return creds;
             } else if !data.trim().is_empty() && !data.trim().starts_with('{') {
-                let creds = MoltbookCreds { api_key: Some(data.trim().to_string()), agent_name: None };
+                let creds = MoltbookCreds {
+                    api_key: Some(data.trim().to_string()),
+                    agent_name: None,
+                };
                 self.save_credentials(&creds);
                 return creds;
             }
@@ -127,9 +136,13 @@ impl MoltbookTool {
                     .get("description")
                     .and_then(|v| v.as_str())
                     .unwrap_or("Autonomous Agent");
-                
+
                 let final_name = if name == "PumAgent" {
-                    let random_suffix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() % 1000000;
+                    let random_suffix = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis()
+                        % 1000000;
                     format!("PumAgent-{:06}", random_suffix)
                 } else {
                     name.to_string()

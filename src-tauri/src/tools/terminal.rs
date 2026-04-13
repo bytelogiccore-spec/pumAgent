@@ -4,12 +4,16 @@ use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
+use std::sync::Arc;
+
 pub struct TerminalTool {
     work_dir: PathBuf,
+    pub dry_run: bool,
+    db: Option<Arc<dbx_core::Database>>,
 }
 
 impl TerminalTool {
-    pub fn new(mut work_dir: PathBuf) -> Self {
+    pub fn new(mut work_dir: PathBuf, db: Option<Arc<dbx_core::Database>>) -> Self {
         // Ensure "Work" directory exists relative to base_dir
         work_dir.push("Work");
 
@@ -17,10 +21,73 @@ impl TerminalTool {
             let _ = fs::create_dir_all(&work_dir);
         }
 
-        TerminalTool { work_dir }
+        TerminalTool {
+            work_dir,
+            dry_run: false,
+            db,
+        }
+    }
+
+    pub fn is_dangerous(&self, cmd_string: &str) -> bool {
+        let lower = cmd_string.to_lowercase();
+
+        let mut dangerous_keywords: Vec<String> = if cfg!(target_os = "windows") {
+            vec![
+                "format ".into(),
+                "diskpart".into(),
+                "remove-item c:\\".into(),
+                "rmdir c:\\".into(),
+                "del c:\\".into(),
+                "rd /s /q c:\\".into(),
+                "stop-process".into(),
+                "vssadmin".into(),
+                "wevtutil cx".into(),
+                "wmic".into(),
+            ]
+        } else {
+            vec![
+                "rm -rf /".into(),
+                "mkfs".into(),
+                "dd if=".into(),
+                "shutdown".into(),
+                "reboot".into(),
+                "sudo ".into(),
+                "chmod -r".into(),
+                "chown -r".into(),
+            ]
+        };
+
+        if let Some(ref db) = self.db {
+            if let Ok(Some(custom_blocklist_bytes)) = db.get("config", b"terminal_blocklist") {
+                if let Ok(custom_blocklist) = String::from_utf8(custom_blocklist_bytes) {
+                    if let Ok(filters) = serde_json::from_str::<Vec<String>>(&custom_blocklist) {
+                        dangerous_keywords.extend(filters.into_iter().map(|s| s.to_lowercase()));
+                    }
+                }
+            }
+        }
+
+        for kw in dangerous_keywords {
+            if lower.contains(&kw) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn execute(&self, cmd_string: &str) -> Result<String, String> {
+        if self.is_dangerous(cmd_string) {
+            return Err("Security Error: The command contains dangerous keywords blocked by the system sandbox.".to_string());
+        }
+
+        if self.dry_run {
+            println!(
+                "🔒 [DRY-RUN MODE] Command intercepted before OS shell launch: {}",
+                cmd_string
+            );
+            return Ok("Command executed successfully in DRY-RUN mode.".to_string());
+        }
+
         // We use powershell to run the command on Windows
         // The sandbox relies on setting the current_dir.
         // Note: For absolute security, docker is needed, but this prevents accidental operations.

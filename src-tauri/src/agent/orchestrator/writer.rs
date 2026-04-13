@@ -12,7 +12,8 @@ impl super::Orchestrator {
         is_tool_done: bool,
     ) -> Result<(LLMResult, Vec<ChatMessage>), String> {
         let writer_prompt = if is_tool_done {
-            let fallback_writer_prompt = crate::agent::prompts::get_fallback_writer_prompt(lang_display);
+            let fallback_writer_prompt =
+                crate::agent::prompts::get_fallback_writer_prompt(lang_display);
             let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt);
             let writer_prompt_msg = ChatMessage {
                 role: "system".to_string(),
@@ -43,7 +44,11 @@ impl super::Orchestrator {
         let _ = log_tx
             .send(format!(
                 "i18n:{}",
-                if is_tool_done { serde_json::json!({"key": "log.writer_writing", "args": {}}) } else { serde_json::json!({"key": "log.writer_summarizing", "args": {}}) }
+                if is_tool_done {
+                    serde_json::json!({"key": "log.writer_writing", "args": {}})
+                } else {
+                    serde_json::json!({"key": "log.writer_summarizing", "args": {}})
+                }
             ))
             .await;
 
@@ -51,7 +56,7 @@ impl super::Orchestrator {
             .get_llm_client_by_id(active_writer_id)
             .chat(&history, 0.7)
             .await;
-            
+
         if writer_res_result.is_err() {
             let _ = log_tx
                 .send(format!(

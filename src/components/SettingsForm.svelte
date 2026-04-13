@@ -5,6 +5,7 @@
   import SettingsRouting from "./settings/SettingsRouting.svelte";
   import SettingsPrompts from "./settings/SettingsPrompts.svelte";
   import SettingsSystem from "./settings/SettingsSystem.svelte";
+  import SettingsTerminal from "./settings/SettingsTerminal.svelte";
 </script>
 
 <div class="settings-body" style="width: 100%; height: 100%; overflow-y: auto; position: relative;">
@@ -20,6 +21,10 @@
 
   {#if appState.sysModalDomain === "setting_heartbeat" || appState.sysModalDomain === "setting_telegram"}
     <SettingsSystem />
+  {/if}
+
+  {#if appState.sysModalDomain === "setting_terminal"}
+    <SettingsTerminal />
   {/if}
 
   <div class="settings-footer">

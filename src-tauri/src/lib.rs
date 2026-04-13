@@ -127,7 +127,7 @@ pub fn run() {
             let search_tool =
                 SearchTool::new("API_KEY".to_string(), "CX".to_string(), base_dir.clone());
             let brain_tool = BrainTool::new(db.clone());
-            let terminal_tool = TerminalTool::new(base_dir.clone());
+            let terminal_tool = TerminalTool::new(base_dir.clone(), Some(db.clone()));
             let knowledge_tool = KnowledgeTool::new(db.clone());
             let telegram_tool = TelegramTool::new(base_dir.clone());
             let http_tool = crate::tools::http_tool::HttpTool::new();
@@ -279,6 +279,8 @@ pub fn run() {
             commands::fs::get_knowledge_quota,
             commands::agent::flush_db,
             commands::agent::translate_i18n,
+            commands::agent::get_terminal_blocklist,
+            commands::agent::save_terminal_blocklist,
             commands::agent::stop_agent,
             commands::agent::list_vault_keys,
             commands::agent::set_vault_secret,

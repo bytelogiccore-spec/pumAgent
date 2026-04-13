@@ -16,7 +16,11 @@ impl KnowledgeTool {
         }
         let ext_name =
             if !name.ends_with(".md") && !name.ends_with(".json") && !name.ends_with(".txt") {
-                format!("{}.md", name)
+                if domain == "schedules" {
+                    format!("{}.json", name)
+                } else {
+                    format!("{}.md", name)
+                }
             } else {
                 name.to_string()
             };
@@ -133,12 +137,13 @@ impl KnowledgeTool {
         llm: Option<crate::agent::llm_client::LLMClient>,
         registry_prompt: Option<String>,
     ) -> crate::agent::multi_agent::ToolResult {
-        let domain = args.get("domain").and_then(|d| d.as_str()).unwrap_or("");
+        let domain = args.get("domain").and_then(|d| d.as_str()).unwrap_or("").to_lowercase();
+        let domain_str = domain.as_str();
         let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
 
         match action.as_str() {
             "list" => {
-                let result = self.list(domain);
+                let result = self.list(domain_str);
                 crate::agent::multi_agent::ToolResult {
                     tool_name: tool,
                     action,
@@ -147,7 +152,7 @@ impl KnowledgeTool {
                 }
             }
             "read" => {
-                let result = self.read(domain, name);
+                let result = self.read(domain_str, name);
                 crate::agent::multi_agent::ToolResult {
                     tool_name: tool,
                     action,
@@ -162,7 +167,7 @@ impl KnowledgeTool {
                     .unwrap_or("")
                     .to_string();
 
-                if (domain == "schedules" || domain == "skills" || domain == "rules")
+                if (domain_str == "schedules" || domain_str == "skills" || domain_str == "rules")
                     && serde_json::from_str::<serde_json::Value>(&content).is_err()
                 {
                     if let (Some(client), Some(prompt)) = (&llm, &registry_prompt) {
@@ -190,7 +195,7 @@ impl KnowledgeTool {
                     }
                 }
 
-                let result = self.write(domain, name, &content);
+                let result = self.write(domain_str, name, &content);
                 crate::agent::multi_agent::ToolResult {
                     tool_name: tool,
                     action,
@@ -199,7 +204,7 @@ impl KnowledgeTool {
                 }
             }
             "delete" => {
-                let result = self.delete(domain, name);
+                let result = self.delete(domain_str, name);
                 crate::agent::multi_agent::ToolResult {
                     tool_name: tool,
                     action,

@@ -4,7 +4,9 @@ use app_lib::agent::llm_client::{ChatMessage, LLMClient};
 async fn test_native_tool_calling_scenario() {
     println!("==================================================");
     println!("🚀 [NEW SCENARIO] Native Tool Calling API Test 🚀");
-    println!("목표: LLM이 텍스트 프롬프트가 아닌 Native Schema를 통해 툴을 인식하고 반환하는지 검증");
+    println!(
+        "목표: LLM이 텍스트 프롬프트가 아닌 Native Schema를 통해 툴을 인식하고 반환하는지 검증"
+    );
     println!("==================================================");
 
     // LLM 엔드포인트 세팅 (이전 시나리오와 동일한 로컬 llama-server IP 참조)
@@ -14,29 +16,27 @@ async fn test_native_tool_calling_scenario() {
     let client = LLMClient::new(endpoint.into(), model.into(), api_key.into());
 
     // 테스트용 단일 스키마 (Search)
-    let tools_schema = vec![
-        serde_json::json!({
-            "type": "function",
-            "function": {
-                "name": "search",
-                "description": "Google Search for finding real-time external information like news or scores.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": { "type": "string", "enum": ["query"] },
-                        "args": { 
-                            "type": "object",
-                            "properties": {
-                                "query": { "type": "string" },
-                                "time_range": { "type": "string" }
-                            }
+    let tools_schema = vec![serde_json::json!({
+        "type": "function",
+        "function": {
+            "name": "search",
+            "description": "Google Search for finding real-time external information like news or scores.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string", "enum": ["query"] },
+                    "args": {
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string" },
+                            "time_range": { "type": "string" }
                         }
-                    },
-                    "required": ["action", "args"]
-                }
+                    }
+                },
+                "required": ["action", "args"]
             }
-        })
-    ];
+        }
+    })];
 
     let messages = vec![
         ChatMessage {
@@ -52,7 +52,7 @@ async fn test_native_tool_calling_scenario() {
     ];
 
     println!("LLM API (llama-server) 에 Native 요청 전송 중...");
-    
+
     // Tools schema 파라미터 주입!
     let response = client
         .with_tools(tools_schema)
@@ -62,11 +62,17 @@ async fn test_native_tool_calling_scenario() {
 
     println!("\n🔍 [LLM 응답 분석]");
     println!("텍스트 응답 (Fallback Contents): {}", response.content);
-    println!("파싱된 네이티브 툴 호출 내역: {}", serde_json::to_string_pretty(&response.native_tool_calls).unwrap_or_default());
+    println!(
+        "파싱된 네이티브 툴 호출 내역: {}",
+        serde_json::to_string_pretty(&response.native_tool_calls).unwrap_or_default()
+    );
 
     // 구형 extract_json_blocks 도 돌려봐서 교차 검증 (아무것도 없어야 정상. 즉 LLM이 마크다운 블록을 뱉은게 아니어야함)
     let old_style_blocks = app_lib::agent::parser::extract_json_blocks(&response.content);
-    println!("구형 정규식 파서에 걸린 블록 수: {}", old_style_blocks.len());
+    println!(
+        "구형 정규식 파서에 걸린 블록 수: {}",
+        old_style_blocks.len()
+    );
 
     let has_native_search = response.native_tool_calls.iter().any(|call| {
         let tool = call.get("tool").and_then(|v| v.as_str()).unwrap_or("");

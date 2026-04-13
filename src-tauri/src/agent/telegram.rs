@@ -65,10 +65,16 @@ pub async fn start_telegram_bot(
                         let mut map = crate::agent::approval::pending_approvals().lock().await;
                         if let Some(tx) = map.remove(id) {
                             let _ = tx.send(is_approve);
-                            let resp_msg = if is_approve { "✅ Execution Approved." } else { "❌ Execution Rejected." };
+                            let resp_msg = if is_approve {
+                                "✅ Execution Approved."
+                            } else {
+                                "❌ Execution Rejected."
+                            };
                             let _ = bot.send_message(msg.chat.id, resp_msg).await;
                         } else {
-                            let _ = bot.send_message(msg.chat.id, "⚠️ Invalid or expired approval ID.").await;
+                            let _ = bot
+                                .send_message(msg.chat.id, "⚠️ Invalid or expired approval ID.")
+                                .await;
                         }
                         return respond(());
                     }
@@ -84,7 +90,10 @@ pub async fn start_telegram_bot(
                     }
                     let _ = app_handle.emit(
                         "tool_log",
-                        format!("i18n:{}", serde_json::json!({"key": "log.sys_telegram_linked", "args": {}})),
+                        format!(
+                            "i18n:{}",
+                            serde_json::json!({"key": "log.sys_telegram_linked", "args": {}})
+                        ),
                     );
                 }
 

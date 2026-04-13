@@ -368,6 +368,13 @@ export async function loadSettings() {
       if (configData.kb_skills_token_limit !== undefined)
         appState.config.kbSkillsTokenLimit = configData.kb_skills_token_limit;
 
+      try {
+        let tb = await invoke<string>("get_terminal_blocklist");
+        appState.config.terminalBlocklistCsv = tb || "";
+      } catch (e) {
+        console.warn("Could not load terminal blocklist", e);
+      }
+
       appState.config.isFirstRun = false;
       addLog(t("sys.config_loaded"));
     }
@@ -414,6 +421,13 @@ export async function saveSettings(closeModal: boolean = true) {
         kb_skills_token_limit: appState.config.kbSkillsTokenLimit,
       },
     });
+
+    try {
+      await invoke("save_terminal_blocklist", { csv: appState.config.terminalBlocklistCsv || "" });
+    } catch (e) {
+      console.warn("Could not save terminal blocklist", e);
+    }
+
     await invoke("flush_db");
     if (closeModal) {
       appState.sysModalOpen = false;

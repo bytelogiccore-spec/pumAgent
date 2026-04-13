@@ -157,7 +157,8 @@ pub fn delete_knowledge(
     let key = format!("{}:{}", domain, name);
     let res = state
         .db
-        .insert("knowledge_base", key.as_bytes(), b"__PUM_DELETED__")
+        .delete("knowledge_base", key.as_bytes())
+        .map(|_| ())
         .map_err(|e| e.to_string());
     let _ = state.db.flush();
     res
@@ -210,7 +211,8 @@ pub fn write_brain_artifact(
 pub fn delete_brain_artifact(name: String, state: State<'_, AgentState>) -> Result<(), String> {
     let res = state
         .db
-        .insert("brain_artifacts", name.as_bytes(), b"__PUM_DELETED__")
+        .delete("brain_artifacts", name.as_bytes())
+        .map(|_| ())
         .map_err(|e| e.to_string());
     let _ = state.db.flush();
     res
@@ -221,7 +223,7 @@ pub fn delete_all_brain_artifacts(state: State<'_, AgentState>) -> Result<(), St
     if let Ok(entries) = state.db.scan("brain_artifacts") {
         for (key, val) in entries {
             if val != b"__PUM_DELETED__" {
-                let _ = state.db.insert("brain_artifacts", &key, b"__PUM_DELETED__");
+                let _ = state.db.delete("brain_artifacts", &key);
             }
         }
     }
@@ -237,7 +239,7 @@ pub fn delete_all_knowledge(domain: String, state: State<'_, AgentState>) -> Res
             if val != b"__PUM_DELETED__" {
                 if let Ok(name) = String::from_utf8(key.clone()) {
                     if name.starts_with(&prefix) {
-                        let _ = state.db.insert("knowledge_base", &key, b"__PUM_DELETED__");
+                        let _ = state.db.delete("knowledge_base", &key);
                     }
                 }
             }

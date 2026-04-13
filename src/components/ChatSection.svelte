@@ -278,10 +278,11 @@
         <textarea
           bind:this={textareaElement}
           class="main-input"
-          placeholder={t("chat.placeholder")}
+          placeholder={appState.isThinking ? "Agent is processing..." : t("chat.placeholder")}
           bind:value={appState.query}
+          disabled={appState.isThinking}
           rows="1"
-          style="resize: none; overflow: hidden; max-height: 200px;"
+          style="resize: none; overflow: hidden; max-height: 200px; opacity: {appState.isThinking ? 0.5 : 1};"
           onkeydown={(e) => {
             if (e.key === "Tab" && e.shiftKey) {
               e.preventDefault();

@@ -75,7 +75,10 @@ impl super::Orchestrator {
                     ))
                     .await;
                 return Ok((
-                    format!("i18n:{}", serde_json::json!({"key": "chat.agent_stopped", "args": {}})),
+                    format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "chat.agent_stopped", "args": {}})
+                    ),
                     history,
                 ));
             }
@@ -269,7 +272,10 @@ impl super::Orchestrator {
 
         self.save_transcript(session_id, &history);
         Ok((
-            format!("i18n:{}", serde_json::json!({"key": "chat.agent_terminated", "args": {}})),
+            format!(
+                "i18n:{}",
+                serde_json::json!({"key": "chat.agent_terminated", "args": {}})
+            ),
             history,
         ))
     }

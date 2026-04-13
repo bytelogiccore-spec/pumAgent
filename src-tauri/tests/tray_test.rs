@@ -1,9 +1,11 @@
-use tauri::menu::{MenuBuilder, MenuItemBuilder, MenuEvent};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
+use tauri::Manager;
 
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let heartbeat_item = MenuItemBuilder::with_id("heartbeat", "HeartBeat: -").enabled(false).build(app)?;
+    let heartbeat_item = MenuItemBuilder::with_id("heartbeat", "HeartBeat: -")
+        .enabled(false)
+        .build(app)?;
     let maximize_item = MenuItemBuilder::with_id("maximize", "최대화").build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", "종료").build(app)?;
 
@@ -13,7 +15,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&quit_item)
         .build()?;
 
-    let tray = TrayIconBuilder::new()
+    let _tray = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {

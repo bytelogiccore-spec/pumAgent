@@ -98,7 +98,10 @@ impl Orchestrator {
         let key = format!("locales:{}.json", language);
         if let Ok(Some(bytes)) = self.db.get("knowledge_base", key.as_bytes()) {
             if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                if let Some(display) = json.get("settings.lang_custom_display").and_then(|v| v.as_str()) {
+                if let Some(display) = json
+                    .get("settings.lang_custom_display")
+                    .and_then(|v| v.as_str())
+                {
                     return display.to_string();
                 }
             }
@@ -144,6 +147,9 @@ impl Orchestrator {
             let mut modules_count = 0;
 
             for (key, val) in records {
+                if val == b"__PUM_DELETED__" {
+                    continue;
+                }
                 let k_str = String::from_utf8_lossy(&key);
                 let parts: Vec<&str> = k_str.split(':').collect();
                 if parts.len() == 2 {
@@ -193,20 +199,38 @@ impl Orchestrator {
         )
     }
 
-    /// Strips internal Gemma chain-of-thought tags like `<channel|>` from final user output
     pub fn sanitize_output(text: &str) -> String {
         let mut clean = text.to_string();
-        if let Some(pos) = clean.rfind("<channel|>") {
-            clean = clean[pos + "<channel|>".len()..].trim().to_string();
+
+        // 2. Strip Gemma specific chain-of-thought tokens (only tool processing remnants)
+        if let Some(pos) = clean.rfind("<|tool_response>") {
+            clean = clean[pos + "<|tool_response>".len()..].to_string();
+            if clean.starts_with("thought ") {
+                clean = clean["thought ".len()..].to_string();
+            }
         }
-        // Also strip self correction checks sometimes emitted by models
+        
+        while let Some(start) = clean.find("<|tool_call>") {
+            if let Some(end) = clean.find("<tool_call|>") {
+                let block = &clean[start..end + "<tool_call|>".len()];
+                clean = clean.replace(block, "");
+            } else {
+                clean = clean.replace("<|tool_call>", "");
+                break;
+            }
+        }
+
+        if let Some(pos) = clean.rfind("<channel|>") {
+            clean = clean[pos + "<channel|>".len()..].to_string();
+        }
+        // 3. Strip self correction checks sometimes emitted by models
         if let Some(pos) = clean.find("*(Self-Correction Check:") {
-            clean = clean[..pos].trim().to_string();
+            clean = clean[..pos].to_string();
         }
         if let Some(pos) = clean.find("*(Self-Correction Check") {
-            clean = clean[..pos].trim().to_string();
+            clean = clean[..pos].to_string();
         }
-        clean
+        clean.trim().to_string()
     }
 
     /// Saves the complete session transcript into the logs/ directory
@@ -257,9 +281,9 @@ impl Orchestrator {
     }
 }
 
+pub mod critic;
 mod multi_agent;
+pub mod planner;
 pub mod reflector;
 mod single_agent;
-pub mod planner;
-pub mod critic;
 pub mod writer;
