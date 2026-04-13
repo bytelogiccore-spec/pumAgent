@@ -18,7 +18,12 @@ impl BrainTool {
             for (key, val) in entries {
                 if val != b"__PUM_DELETED__" {
                     if let Ok(name) = String::from_utf8(key) {
-                        list_md.push_str(&format!("- {}\n", name));
+                        let content = String::from_utf8_lossy(&val);
+                        let mut preview = content.trim().replace('\n', " ");
+                        if preview.len() > 100 {
+                            preview = format!("{}...", &preview[..100]);
+                        }
+                        list_md.push_str(&format!("- **{}** (Preview: {})\n", name, preview));
                         count += 1;
                     }
                 }

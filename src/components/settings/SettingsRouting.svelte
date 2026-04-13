@@ -1,5 +1,7 @@
 <script lang="ts">
   import { appState, showError } from "../../lib/store.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { t } from "../../lib/i18n.svelte";
   
   function addEndpoint() {
     appState.config.endpoints = [...appState.config.endpoints, {
@@ -18,6 +20,19 @@
       return;
     }
     appState.config.endpoints = appState.config.endpoints.filter((_, i) => i !== idx);
+  }
+
+  async function testConnection(ep: any) {
+    try {
+      const response = await invoke("test_llm_connection", {
+        apiUrl: ep.api_url,
+        model: ep.model || "",
+        apiKey: ep.api_key || "",
+      });
+      alert(`✅ Connection Successful!\n\nServer Response:\n${response}`);
+    } catch (e) {
+      alert(`❌ Connection Failed!\n\nError:\n${e}`);
+    }
   }
 
   const FIXED_URLS = [
@@ -91,7 +106,10 @@
         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; color: {ep.is_enabled ? '#10b981' : '#ef4444'}; cursor: pointer;">
           <input type="checkbox" bind:checked={ep.is_enabled} /> {ep.is_enabled ? 'Active' : 'Disabled'}
         </label>
-        <button class="remove-btn" onclick={() => removeEndpoint(idx)}>Delete</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="test-btn" onclick={() => testConnection(ep)}>🔌 Ping</button>
+          <button class="remove-btn" onclick={() => removeEndpoint(idx)}>Delete</button>
+        </div>
       </div>
 
       <div class="form-group">
@@ -160,11 +178,11 @@
   <div style="margin-top: 20px; padding: 20px; background: #f0ede1; border: 1px solid #1a1a1a;">
     <div style="font-size: 0.95rem; font-weight: 700; color: #1a1a1a; margin-bottom: 16px; display:flex; align-items:center; gap: 6px; text-transform: uppercase; letter-spacing: 0.05em;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-      Agent Role Routing
+      {t("settings.role_routing_title") || "Agent Role Routing"}
     </div>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
       <label style="font-size: 0.85rem; display:flex; flex-direction:column; gap:6px; color:#1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        Planner (Drafting Plans)
+        {t("settings.role_planner") || "Planner (Drafting Plans)"}
         <select bind:value={appState.config.plannerEndpointId} class="sys-select" style="padding: 10px;">
           {#each appState.config.endpoints as ep}
             <option value={ep.id}>{ep.name} ({ep.model})</option>
@@ -172,7 +190,7 @@
         </select>
       </label>
       <label style="font-size: 0.85rem; display:flex; flex-direction:column; gap:6px; color:#1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        Critic (Reviewing)
+        {t("settings.role_critic") || "Critic (Reviewing)"}
         <select bind:value={appState.config.criticEndpointId} class="sys-select" style="padding: 10px;">
           {#each appState.config.endpoints as ep}
             <option value={ep.id}>{ep.name} ({ep.model})</option>
@@ -180,7 +198,7 @@
         </select>
       </label>
       <label style="font-size: 0.85rem; display:flex; flex-direction:column; gap:6px; color:#1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        Writer (Final Synthesis)
+        {t("settings.role_writer") || "Writer (Final Synthesis)"}
         <select bind:value={appState.config.writerEndpointId} class="sys-select" style="padding: 10px;">
           {#each appState.config.endpoints as ep}
             <option value={ep.id}>{ep.name} ({ep.model})</option>
@@ -188,7 +206,7 @@
         </select>
       </label>
       <label style="font-size: 0.85rem; display:flex; flex-direction:column; gap:6px; color:#1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        Worker (Execution)
+        {t("settings.role_worker") || "Worker (Execution)"}
         <select bind:value={appState.config.workerEndpointId} class="sys-select" style="padding: 10px;">
           {#each appState.config.endpoints as ep}
             <option value={ep.id}>{ep.name} ({ep.model})</option>
@@ -196,7 +214,7 @@
         </select>
       </label>
       <label style="font-size: 0.85rem; display:flex; flex-direction:column; gap:6px; color:#1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        Reflector (Background Memory)
+        {t("settings.role_reflector") || "Reflector (Background Memory)"}
         <select bind:value={appState.config.reflectorEndpointId} class="sys-select" style="padding: 10px;">
           {#each appState.config.endpoints as ep}
             <option value={ep.id}>{ep.name} ({ep.model})</option>
@@ -204,7 +222,7 @@
         </select>
       </label>
       <label style="font-size: 0.85rem; display:flex; flex-direction:column; gap:6px; color:#1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-        Registry (Architecture)
+        {t("settings.role_registry") || "Registry (Architecture)"}
         <select bind:value={appState.config.registryEndpointId} class="sys-select" style="padding: 10px;">
           {#each appState.config.endpoints as ep}
             <option value={ep.id}>{ep.name} ({ep.model})</option>
@@ -296,6 +314,19 @@
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     border-color: rgba(255,255,255,0.15);
+  }
+  .test-btn {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .test-btn:hover {
+    background: rgba(16, 185, 129, 0.2);
   }
   .remove-btn {
     background: rgba(239, 68, 68, 0.1);

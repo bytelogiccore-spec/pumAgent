@@ -120,7 +120,7 @@ impl Orchestrator {
             schedules_summary, status_summary
         );
 
-        let mut rules_str = String::from("[GLOBAL BEHAVIOR RULES]\nThese rules apply to ALL your actions and final outputs. You MUST obey them:\n");
+        let mut rules_str = String::from("[GLOBAL BEHAVIOR RULES]\nThese rules apply to ALL your actions and final outputs. You MUST obey them:\n- [ANTI-SPLINTERING POLICY]: When saving data to the `brain` or `knowledge` tool (skills, workflows, schedules), ALWAYS check existing item lists first. If an item for the same topic or purpose already exists, you MUST `read` it first, merge the new data, and overwrite it using the EXACT SAME name. DO NOT create fragmented versions like `topic_2.md` or `schedule_v2`.\n");
         let mut modules_str = String::from("\n[AVAILABLE CUSTOM SKILLS & WORKFLOWS]\nThe following modules are registered in your database. If a requested task matches these names, you MUST use the `knowledge` tool (action=\"read\") to read their exact instructions before starting:\n");
 
         if let Ok(records) = self.db.scan("knowledge_base") {
@@ -136,7 +136,12 @@ impl Orchestrator {
                         rules_str.push_str(&format!("- RULE [{}]:\n{}\n\n", parts[1], content.trim()));
                         rules_count += 1;
                     } else if k_str.starts_with("skills:") || k_str.starts_with("workflows:") {
-                        modules_str.push_str(&format!("- Domain: {}, Name: {}\n", parts[0], parts[1]));
+                        let content = String::from_utf8_lossy(&val);
+                        let mut preview = content.trim().replace('\n', " ");
+                        if preview.len() > 100 {
+                            preview = format!("{}...", &preview[..100]);
+                        }
+                        modules_str.push_str(&format!("- Domain: {}, Name: {} (Preview: {})\n", parts[0], parts[1], preview));
                         modules_count += 1;
                     }
                 }

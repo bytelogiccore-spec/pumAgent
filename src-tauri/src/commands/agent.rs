@@ -76,8 +76,11 @@ pub async fn execute_agent_tools(
         state.base_dir.clone(),
         state.db.clone(),
     );
-
-    let mut actual_system_prompt = payload.worker_prompt.unwrap_or(payload.system_prompt);
+    let mut actual_system_prompt = if payload.use_multi_agent_workflow {
+        payload.worker_prompt.unwrap_or_else(|| payload.system_prompt.clone())
+    } else {
+        payload.system_prompt.clone()
+    };
     actual_system_prompt.push_str(&format!(
         "\n\n[GLOBAL RULE]\nCRITICAL: Any content intended for the user (such as final output or Telegram notifications) MUST be composed in {}.",
         payload.language
@@ -89,6 +92,34 @@ pub async fn execute_agent_tools(
         actual_system_prompt.push_str("\n\n!! CRITICAL DIRECTIVE !!\nDO NOT OUTPUT ANY REASONING, THINKING, OR THOUGHT BLOCKS. DO NOT USE <think> OR SIMILAR TAGS. PROVIDE YOUR FINAL RESPONSE DIRECTLY AND IMMEDIATELY.");
     }
 
+    let mut actual_messages = payload.messages;
+    if let Some(last_msg) = actual_messages.last_mut() {
+        if last_msg.role == "user" {
+            if let Ok(re) = regex::Regex::new(r"https?://[^\s]+") {
+                let mut appended_context = String::new();
+                let content_clone = last_msg.content.clone();
+                for cap in re.captures_iter(&content_clone) {
+                    let url = cap[0].trim_end_matches(|c: char| !c.is_alphanumeric() && c != '/');
+                    let _ = tx.send(format!("[시스템] 사용자 쿼리 내에서 URL({})을 감지하여 자동 크롤링(Auto-Scraping)을 시작합니다...", url)).await;
+                    let crawler = crate::tools::crawler::Crawler::new();
+                    match crawler.scrape(url).await {
+                        Ok(markdown) => {
+                            let _ = tx.send("[시스템] 기습 크롤링 성공! 페이지 데이터를 프롬프트 문맥에 선제적으로(Pre-fetch) 캐싱했습니다.".to_string()).await;
+                            appended_context.push_str(&format!("\n\n[SYSTEM PRE-FETCHED CONTENT FOR {}]\n{}\n", url, markdown));
+                        }
+                        Err(e) => {
+                            let _ = tx.send(format!("[시스템] 자동 크롤링 실패 (보안 또는 렌더링 에러): {}", e)).await;
+                        }
+                    }
+                }
+                if !appended_context.is_empty() {
+                    last_msg.content.push_str(&appended_context);
+                    last_msg.content.push_str("\n\n[SYSTEM DIRECTIVE]: The system has already Pre-fetched the requested URL(s) above. Use this attached data to resolve the user's request directly. You DO NOT need to use `search` or `crawl4ai` tools again unless strictly necessary!");
+                }
+            }
+        }
+    }
+
     let (final_answer, history) = orchestrator
         .run_loop(
             payload.session_id.clone(),
@@ -96,7 +127,7 @@ pub async fn execute_agent_tools(
             payload.planner_prompt.as_deref(),
             payload.critic_prompt.as_deref(),
             payload.writer_prompt.as_deref(),
-            payload.messages,
+            actual_messages,
             &payload.language,
             payload.max_loops,
             payload.use_multi_agent_workflow,

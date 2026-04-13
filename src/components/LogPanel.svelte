@@ -34,8 +34,10 @@
 <style>
   .log-section {
     width: 35vw;
+    min-width: 320px;
+    max-width: 500px;
+    flex-shrink: 0;
     border-left: 1px solid #1a1a1a;
-    min-width: 300px;
     display: flex;
     flex-direction: column;
     background: #ebe8de;

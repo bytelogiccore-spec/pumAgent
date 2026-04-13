@@ -2,14 +2,20 @@ use chrono::{DateTime, Local, Utc};
 use dbx_core::Database;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::str::FromStr;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ScheduleConfig {
     pub name: String,
+    #[serde(default)]
     pub interval_seconds: Option<u64>,
+    #[serde(default)]
+    pub cron_expression: Option<String>,
     pub description: String,
     pub task_prompt: String,
+    #[serde(default)]
     pub last_run: Option<String>, // ISO 8601
+    #[serde(default)]
     pub end_date: Option<String>,
 }
 
@@ -67,28 +73,37 @@ impl Scheduler {
                                     }
                                 }
 
-                                // Check Interval
+                                // Check Cron & Interval
                                 if !is_expired {
-                                    if let Some(interval) = sched.interval_seconds {
+                                    if let Some(cron_expr) = &sched.cron_expression {
+                                        if let Ok(cron) = cron::Schedule::from_str(cron_expr) {
+                                            if let Some(last) = last_run_dt {
+                                                if let Some(target) = cron.after(&last).next() {
+                                                    if now >= target {
+                                                        should_run = true;
+                                                    }
+                                                }
+                                            } else {
+                                                should_run = true; // Run immediately to set baseline
+                                            }
+                                            if let Some(next_upcoming) = cron.upcoming(Local).next() {
+                                                next_exec = format!("{} (Cron)", next_upcoming.format("%Y-%m-%d %H:%M:%S"));
+                                            }
+                                        } else {
+                                            next_exec = "크론 문법 에러".to_string();
+                                        }
+                                    } else if let Some(interval) = sched.interval_seconds {
                                         if let Some(last) = last_run_dt {
                                             let diff = (now - last).num_seconds();
                                             if diff >= interval as i64 {
                                                 should_run = true;
                                             }
-                                            let next =
-                                                last + chrono::Duration::seconds(interval as i64);
-                                            next_exec = next
-                                                .with_timezone(&Local)
-                                                .format("%Y-%m-%d %H:%M:%S")
-                                                .to_string();
+                                            let next = last + chrono::Duration::seconds(interval as i64);
+                                            next_exec = next.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S").to_string();
                                         } else {
                                             should_run = true;
-                                            let next =
-                                                now + chrono::Duration::seconds(interval as i64);
-                                            next_exec = next
-                                                .with_timezone(&Local)
-                                                .format("%Y-%m-%d %H:%M:%S")
-                                                .to_string();
+                                            let next = now + chrono::Duration::seconds(interval as i64);
+                                            next_exec = next.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S").to_string();
                                         }
                                     }
                                 }

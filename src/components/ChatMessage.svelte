@@ -109,6 +109,7 @@
     gap: 24px;
     align-items: flex-start;
     max-width: 85%;
+    min-width: 0;
     animation: fadeIn 0.3s ease-out;
   }
   @keyframes fadeIn {
@@ -145,6 +146,24 @@
     font-size: 1.05rem;
     line-height: 1.7;
     color: #1a1a1a;
+    min-width: 0;
+    overflow-wrap: break-word;
+  }
+  .bubble :global(pre) {
+    overflow-x: auto;
+    max-width: 100%;
+    margin: 12px 0;
+    padding: 12px;
+    background: #ebe8de;
+    border: 1px solid #1a1a1a;
+  }
+  .bubble :global(code) {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .bubble :global(pre code) {
+    white-space: pre;
+    word-break: normal;
   }
   .message.user .bubble {
     background: #ebe8de;

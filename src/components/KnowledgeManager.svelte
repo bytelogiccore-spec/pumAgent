@@ -5,6 +5,7 @@
     appState,
     createSysItem,
     deleteSelectedLogs,
+    deleteAllSysItems,
     loadSysItem,
     deleteSysItem,
     saveSysItem,
@@ -47,7 +48,11 @@
   }
 
   let nextExecutionText = $derived.by(() => {
-    if (!scheduleData || !scheduleData.interval_seconds) return t("knowledge.sched_not_set");
+    if (!scheduleData) return t("knowledge.sched_not_set");
+    if (scheduleData.cron_expression && scheduleData.cron_expression.trim() !== "") {
+        return t("knowledge.sched_cron_set", { cron: scheduleData.cron_expression });
+    }
+    if (!scheduleData.interval_seconds) return t("knowledge.sched_not_set");
     let baseTime = scheduleData.last_run ? new Date(scheduleData.last_run) : new Date();
     let nextTime = new Date(baseTime.getTime() + scheduleData.interval_seconds * 1000);
     return t("knowledge.sched_next", { time: nextTime.toLocaleString(appState.config.language === "ko" ? "ko-KR" : "en-US", { dateStyle: "long", timeStyle: "medium" }) });
@@ -58,11 +63,21 @@
   {#if appState.showSysSidebar}
     <div class="sys-sidebar">
       {#if appState.sysModalDomain !== "logs"}
-        <button class="sys-create-btn" onclick={createSysItem}>{t("knowledge.create")}</button>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px; padding: 0 16px;">
+          <button class="sys-create-btn" style="flex: 1; margin: 0; width: auto;" onclick={createSysItem}>{t("knowledge.create")}</button>
+          {#if appState.sysModalItems.length > 0}
+            <button class="sys-create-btn sys-danger" style="flex: none; margin: 0; width: auto; padding: 0 12px; font-weight: bold; font-size: 1.1em" onclick={deleteAllSysItems} title={t("knowledge.deleteAll")}>🗑</button>
+          {/if}
+        </div>
       {:else}
+        <div style="display: flex; gap: 8px; margin-bottom: 8px; padding: 0 16px;">
         {#if appState.selectedLogs.length > 0}
-          <button class="sys-create-btn sys-danger" style="margin-bottom: 8px; font-weight: bold; padding: 8px;" onclick={deleteSelectedLogs}>{t("knowledge.deleteSelected", { count: appState.selectedLogs.length })}</button>
+          <button class="sys-create-btn sys-danger" style="flex: 1; margin: 0; width: auto; font-weight: bold;" onclick={deleteSelectedLogs}>{t("knowledge.deleteSelected", { count: appState.selectedLogs.length })}</button>
         {/if}
+        {#if appState.sysModalItems.length > 0}
+          <button class="sys-create-btn sys-danger" style="flex: none; margin: 0; width: auto; padding: 0 12px; font-weight: bold; font-size: 1.1em" onclick={deleteAllSysItems} title={t("knowledge.deleteAll")}>🗑</button>
+        {/if}
+        </div>
       {/if}
       {#if appState.sysModalItems.length === 0}
         <div style="padding:10px; color:#a1a1aa; font-size:0.85rem">{t("knowledge.empty")}</div>
@@ -118,9 +133,15 @@
               <input id="schedInterval" type="number" bind:value={scheduleData.interval_seconds} oninput={syncScheduleData} placeholder={t("knowledge.ph_interval")} />
             </div>
             <div class="form-group" style="flex: 1;">
+              <label for="schedCron">{t("knowledge.label_cron")}</label>
+              <input id="schedCron" type="text" bind:value={scheduleData.cron_expression} oninput={syncScheduleData} placeholder={t("knowledge.ph_cron")} />
+            </div>
+            <div class="form-group" style="flex: 1;">
               <label for="schedEndDate">{t("knowledge.label_end")}</label>
               <input id="schedEndDate" type="text" bind:value={scheduleData.end_date} oninput={syncScheduleData} placeholder={t("knowledge.ph_end")} />
             </div>
+          </div>
+          <div style="display: flex; gap: 16px;">
             <div class="form-group" style="flex: 1;">
               <span style="display:block; margin-bottom:8px; font-weight:600; font-size:0.85rem; color:#a1a1aa; text-transform:uppercase;">{t("knowledge.label_next_time")}</span>
               <div style="padding: 8px 12px; background: #e0f2fe; color: #0369a1; border-radius: 6px; font-weight: 600; font-size: 0.85rem; border: 1px solid #bae6fd;">

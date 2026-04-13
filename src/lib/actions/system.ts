@@ -139,6 +139,27 @@ export async function deleteSelectedLogs() {
   }
 }
 
+export async function deleteAllSysItems() {
+  if (!confirm(t("knowledge.confirmDeleteAll"))) return;
+  try {
+    if (appState.sysModalDomain === "logs") {
+      await invoke("delete_all_logs");
+      appState.selectedLogs = [];
+    } else if (appState.sysModalDomain === "brain") {
+      await invoke("delete_all_brain_artifacts");
+    } else {
+      await invoke("delete_all_knowledge", { domain: appState.sysModalDomain });
+    }
+    appState.sysModalItems = [];
+    appState.viewingItemContent = null;
+    appState.viewingItemName = null;
+    refreshKbQuota();
+    addLog(t("knowledge.deletedAllItems"));
+  } catch (e) {
+    showError(`Delete all failed: ${e}`);
+  }
+}
+
 export async function saveSysItem() {
   if (!appState.viewingItemName) return;
   try {
@@ -262,6 +283,7 @@ export async function saveSettings(closeModal: boolean = true) {
         is_first_run: appState.config.isFirstRun,
         endpoints: appState.config.endpoints,
         planner_endpoint_id: appState.config.plannerEndpointId,
+        critic_endpoint_id: appState.config.criticEndpointId,
         writer_endpoint_id: appState.config.writerEndpointId,
         worker_endpoint_id: appState.config.workerEndpointId,
         reflector_endpoint_id: appState.config.reflectorEndpointId,

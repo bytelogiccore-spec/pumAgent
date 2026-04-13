@@ -37,7 +37,7 @@ impl LLMClient {
     pub fn new(base_url: String, model: String, api_key: String) -> Self {
         LLMClient {
             client: Client::builder()
-                .timeout(Duration::from_secs(180))
+                .timeout(Duration::from_secs(300)) // 5 minutes (sufficient for heavy local prompts without endless hanging)
                 .build()
                 .unwrap_or_default(),
             base_url,

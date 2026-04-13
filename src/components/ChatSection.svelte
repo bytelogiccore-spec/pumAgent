@@ -357,6 +357,7 @@
     border-right: 1px solid #1a1a1a;
     z-index: 10;
     position: relative;
+    min-width: 0;
   }
 
   .header-buttons {

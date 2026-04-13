@@ -201,3 +201,49 @@ pub fn delete_brain_artifact(name: String, state: State<'_, AgentState>) -> Resu
     let _ = state.db.flush();
     res
 }
+
+#[tauri::command]
+pub fn delete_all_brain_artifacts(state: State<'_, AgentState>) -> Result<(), String> {
+    if let Ok(entries) = state.db.scan("brain_artifacts") {
+        for (key, val) in entries {
+            if val != b"__PUM_DELETED__" {
+                let _ = state.db.insert("brain_artifacts", &key, b"__PUM_DELETED__");
+            }
+        }
+    }
+    let _ = state.db.flush();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_all_knowledge(domain: String, state: State<'_, AgentState>) -> Result<(), String> {
+    let prefix = format!("{}:", domain);
+    if let Ok(entries) = state.db.scan("knowledge_base") {
+        for (key, val) in entries {
+            if val != b"__PUM_DELETED__" {
+                if let Ok(name) = String::from_utf8(key.clone()) {
+                    if name.starts_with(&prefix) {
+                        let _ = state.db.insert("knowledge_base", &key, b"__PUM_DELETED__");
+                    }
+                }
+            }
+        }
+    }
+    let _ = state.db.flush();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_all_logs(state: State<'_, AgentState>) -> Result<(), String> {
+    let logs_dir = state.base_dir.join("logs");
+    if let Ok(entries) = fs::read_dir(&logs_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+    Ok(())
+}

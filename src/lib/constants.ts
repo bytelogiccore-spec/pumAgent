@@ -11,9 +11,9 @@ Current System Time: {CURRENT_TIME} (You live in this exact present moment. Use 
    - "crawl4ai": (action: "scrape", args: {"url": "string"}) -> CRITICAL: If the user provides a URL or asks to read a specific website, you MUST use this tool to scrape the webpage first.
    - "brain": (action: "list", args: {}) -> List all your long-term memory artifact files.
    - "brain": (action: "read", args: {"name": "filename.md"}) -> Read the precise content of a specific memory artifact file.
-   - "brain": (action: "write_artifact", args: {"name": "filename.md", "content": "---\\ntype: memory\\ntags: [a, b]\\n---\\nbody..."}) -> Create or overwrite a long-term memory document. CRITICAL: ALL brain artifacts MUST start with valid YAML frontmatter specifying \`type\` and an array of \`tags\`!
+   - "brain": (action: "write_artifact", args: {"name": "filename.md", "content": "---\\ntype: memory\\ntags: [a, b]\\n---\\nbody..."}) -> Create or overwrite a long-term memory document. CRITICAL: ALL brain artifacts MUST start with valid YAML frontmatter. ANTI-SPLINTERING: If a related file already exists, MUST 'read' it first, merge data, and overwrite!
    - "terminal": (action: "execute", args: {"command": "string"}) -> Execute Powershell commands. *WARNING: You are sandboxed to the \`./Work/\` folder.*
-   - "knowledge": (action: "read"|"write"|"list"|"delete", args: {"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}) -> Manage your own logic, rules, and schedules by writing to the knowledge base!
+   - "knowledge": (action: "read"|"write"|"list"|"delete", args: {"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}) -> Manage your own logic, rules, and schedules by writing to the knowledge base! ANTI-SPLINTERING: Always read and overwrite existing items instead of creating _v2.
      * IF the user asks to save a rule, skill, or workflow, use the \`knowledge\` tool. CRITICAL: For scheduling ANY periodic or recurring task (e.g., "Do this every hour", "5분마다 알려줘"), you MUST use \`domain="schedules"\`! Do NOT use "workflows" for recurring background tasks.
      * PROACTIVELY manage your memory! Even if the user doesn't explicitly ask, if you discover important facts, user preferences, or complete a task (like sending daily news), YOU MUST use the \`brain\` tool to \`write_artifact\` to store a memory log to avoid repeating yourself in future heartbeats!
    - "telegram": (action: "send_message", args: {"message": "string"}) -> Send a notification to the user's mobile Telegram. CRITICAL: The system does NOT send messages automatically. You MUST explicitly output this JSON tool block to physically send the message! USE THIS immediately for scheduled tasks.
@@ -40,7 +40,7 @@ export const DEFAULT_WRITER = `[WRITER AGENT] Synthesize findings & history into
 
 export const DEFAULT_REFLECTOR = `[REFLECTOR AGENT] Silent background unit. Review history:
 1. Periodic tasks requested? Use 'knowledge' tool (domain="schedules") to 'write'.
-2. New facts, user prefs, or actions taken? Use 'brain' tool to 'write_artifact'. CRITICAL: Content MUST start with YAML frontmatter specifying \`type\` and an array of \`tags\`!
+2. New facts, user prefs, or actions taken? Use 'brain' tool to store them! CRITICAL: NEVER splinter files! If a related file exists, 'read' it first, merge the data, then 'write_artifact' to overwrite it. Content MUST start with YAML frontmatter specifying \`type\` and \`tags\`!
 3. No action needed? Output 'NO_MEMORY_NEEDED'.
 Tool format: {"tool": "brain|knowledge", "action": "write|write_artifact", "args": {...}}`;
 
