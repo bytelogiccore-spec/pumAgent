@@ -291,7 +291,7 @@ pub async fn compress_memory(payload: CompressPayload) -> Result<String, String>
     let llm = LLMClient::new(endpoint.api_url, endpoint.model, endpoint.api_key);
     let system_msg = ChatMessage {
         role: "system".to_string(),
-        content: "제공된 과거의 대화 및 사고 내역을 짧고 명료하게 요약해라. 핵심적인 사실, 유저의 요청 사항, 수집된 주요 정보 및 앞으로 진행해야 할 남은 계획 위주로 압축할 것. 불필요한 인사말이나 서론 없이 압축된 컨텍스트만 한국어로 반환할 것.".to_string(),
+        content: "Draft a concise and clear summary of the provided past conversation and thought history. Focus on key facts, user requests, collected information, and remaining plans to execute. Return only the compressed context without any greetings or introductions. You MUST respond in the same language as the user's latest query.".to_string(),
         images_base64: None,
     };
 
@@ -306,7 +306,7 @@ pub async fn compress_memory(payload: CompressPayload) -> Result<String, String>
 
     let user_msg = ChatMessage {
         role: "user".to_string(),
-        content: format!("다음 과거 대화 내역을 요약해라:\n\n{}", combined_text),
+        content: format!("Summarize the following past conversation history:\n\n{}", combined_text),
         images_base64: None,
     };
 
@@ -314,7 +314,7 @@ pub async fn compress_memory(payload: CompressPayload) -> Result<String, String>
 
     match llm.chat(&history, 0.4).await {
         Ok(res) => Ok(res.content.trim().to_string()),
-        Err(e) => Err(format!("메모리 압축 오류: {}", e)),
+        Err(e) => Err(format!("Memory compression error: {}", e)),
     }
 }
 

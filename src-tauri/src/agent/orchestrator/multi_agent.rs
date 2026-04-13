@@ -109,7 +109,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
         loop {
             if cancel_flag.load(Ordering::Relaxed) {
                 let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.agent_stopped_by_user", "args": {}}))).await;
-                return Ok(("[사용자 중지됨]".to_string(), history));
+                return Ok(("[USER_STOPPED]".to_string(), history));
             }
 
             loop_count += 1;
@@ -169,10 +169,9 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             let planner_res = match planner_res_result {
                 Ok(r) => r,
                 Err(e) => {
-                    return Err(format!(
-                        "Planner LLM 최종 통신 불가 (주력 및 예비 모델 모두 실패): {}",
-                        e
-                    ))
+                    let err_msg = format!("Planner LLM Final Failure: {}", e);
+                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}}))).await;
+                    return Err(err_msg);
                 }
             };
 
@@ -228,7 +227,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                         .chat(&writer_history, 0.7)
                         .await;
                         if writer_res_result.is_ok() {
-                            let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
                             break;
                         }
                     }
@@ -266,7 +265,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
             let mut result_summary_md = String::from("### Tool Execution Results\n");
             for r in results {
-                let status = if r.ok { "성공" } else { "실패" };
+                let status = if r.ok { "SUCCESS" } else { "FAIL" };
                 let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name, "action": r.action, "status": status}}))).await;
 
                 if r.ok
@@ -327,7 +326,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     .await;
                     if critic_res_result.is_ok() {
                         active_critic_id = fallback_ep.id.clone();
-                        let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                        let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
                         break;
                     }
                 }
@@ -365,7 +364,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     .chat(&writer_history, 0.7)
                     .await;
                 if writer_res_result.is_err() {
-                    let _ = log_tx.send("[경고] Writer LLM 에러, 예비 모델들로 폴백(Fallback) 라우팅을 시도합니다...".to_string()).await;
+                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.writer_fallback", "args": {}}))).await;
                     for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
                         writer_res_result = crate::agent::llm_client::LLMClient::new(
                             fallback_ep.api_url.clone(),
@@ -375,13 +374,13 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                         .chat(&writer_history, 0.7)
                         .await;
                         if writer_res_result.is_ok() {
-                            let _ = log_tx.send(format!("[안내] 예비 LLM 통신 성공. 현재 세션 동안 {} 모델로 대체 작동합니다.", fallback_ep.name)).await;
+                            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
                             break;
                         }
                     }
                 }
                 let writer_res = writer_res_result.unwrap_or_else(|_| LLMResult {
-                    content: "Writer 에러".to_string(),
+                    content: "Writer Error".to_string(),
                     raw: serde_json::Value::Null,
                 });
 
@@ -409,7 +408,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
         self.save_transcript(session_id.clone(), &history);
         Ok((
-            "에이전트 파이프라인이 결론을 짓지 못하고 종료되었습니다.".to_string(),
+            "Agent Pipeline Terminated without Conclusion.".to_string(),
             history,
         ))
     }

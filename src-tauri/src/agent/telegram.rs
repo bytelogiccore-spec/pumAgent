@@ -32,14 +32,14 @@ pub async fn start_telegram_bot(
     match bot.get_me().await {
         Ok(me) => {
             let msg = format!(
-                "[시스템] 텔레그램 봇 연동 성공! (@{}) - 대기중...",
+                "[System] Telegram Bot integration successful! (@{}) - Waiting for messages...",
                 me.user.username.unwrap_or_default()
             );
             let _ = app_handle.emit("tool_log", msg);
         }
         Err(e) => {
             let msg = format!(
-                "[시스템 오류] 텔레그램 봇 연동 실패 (토큰 확인 필요): {}",
+                "[System Error] Telegram Bot integration failed (Check Token): {}",
                 e
             );
             let _ = app_handle.emit("tool_log", msg);
@@ -67,12 +67,12 @@ pub async fn start_telegram_bot(
                     }
                     let _ = app_handle.emit(
                         "tool_log",
-                        "[시스템] 텔레그램 채팅방 ID 연동 완료. (Push 알림 가능)".to_string(),
+                        "[System] Telegram Chat ID linked successfully. (Push notifications enabled)".to_string(),
                     );
                 }
 
                 let _ = bot
-                    .send_message(msg.chat.id, format!("🤖 처리 시작: `{}`", text))
+                    .send_message(msg.chat.id, format!("🤖 Processing started: `{}`", text))
                     .await;
 
                 let routing_flags = super::orchestrator::OrchestratorRouting {
@@ -134,7 +134,7 @@ pub async fn start_telegram_bot(
                     }
                     Err(e) => {
                         let _ = bot
-                            .send_message(msg.chat.id, format!("❌ 오류 발생:\n{}", e))
+                            .send_message(msg.chat.id, format!("❌ Error occurred:\n{}", e))
                             .await;
                     }
                 }

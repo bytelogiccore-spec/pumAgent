@@ -43,7 +43,7 @@ impl super::Orchestrator {
 
         let (lang_name, lang_native) = match language {
             "en" => ("ENGLISH".to_string(), "English".to_string()),
-            "ko" => ("KOREAN".to_string(), "한국어".to_string()),
+            "ko" => ("KOREAN".to_string(), "Korean".to_string()),
             _ => (language.to_uppercase(), language.to_string()),
         };
 
@@ -120,16 +120,13 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 let _ = log_tx
                     .send("[안내] 사용자에 의해 에이전트 실행이 중지되었습니다.".to_string())
                     .await;
-                return Ok(("[사용자 중지됨]".to_string(), history));
+                return Ok(("[USER_STOPPED]".to_string(), history));
             }
 
             loop_count += 1;
             if loop_count > max_loops {
                 let _ = log_tx
-                    .send(format!(
-                        "[경고] 최대 루프 제한({}회)에 도달했습니다.",
-                        max_loops
-                    ))
+                    .send(format!("i18n:{}", serde_json::json!({"key": "log.max_loops_reached", "args": {"loops": max_loops}})))
                     .await;
                 break;
             }
@@ -149,12 +146,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 }
                 tasks_md.push_str("\nAGENT, please execute the required tool calls to satisfy these scheduled tasks.");
 
-                let _ = log_tx
-                    .send(
-                        "[안내] 백그라운드 예약된 작업(Schedule) 실행 지시문을 주입했습니다."
-                            .to_string(),
-                    )
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.injected_scheduled_task", "args": {}}))).await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
                     content: tasks_md,
@@ -162,9 +154,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 });
             }
 
-            let _ = log_tx
-                .send(format!("[Step {}/LLM] AI 응답 대기 중...", loop_count))
-                .await;
+            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_waiting", "args": {"step": loop_count}}))).await;
 
             let mut response_res = self
                 .get_llm_client_by_id(&active_worker_id)
@@ -193,7 +183,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             let response = match response_res {
                 Ok(res) => res,
                 Err(e) => {
-                    let err_msg = format!("최종 LLM 통신 불가 (활성화된 모든 모델 실패): {}", e);
+                    let err_msg = format!("Final LLM Failure: {}", e);
                     let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}}))).await;
                     return Err(err_msg);
                 }
@@ -237,12 +227,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 return Ok((Self::sanitize_output(&ai_text), history));
             }
 
-            let _ = log_tx
-                .send(format!(
-                    "[플래너] {}개의 툴 작업을 식별하고 병렬 트리거합니다.",
-                    tool_calls.len()
-                ))
-                .await;
+            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_tools_requested", "args": {"count": tool_calls.len()}}))).await;
 
             // Execute Tools
             let results = self
@@ -256,7 +241,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
             let mut result_summary_md = String::from("### Tool Execution Results\n");
             for r in results {
-                let status = if r.ok { "성공" } else { "실패" };
+                let status = if r.ok { "SUCCESS" } else { "FAIL" };
                 let _ = log_tx
                     .send(format!(" -> [{}.{}] {}", r.tool_name, r.action, status))
                     .await;
@@ -265,9 +250,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     && (r.action == "write" || r.action == "write_artifact")
                     && (r.tool_name == "brain" || r.tool_name == "knowledge")
                 {
-                    let _ = log_tx
-                        .send(format!("[DB 저장 이벤트] 💾 {} 도구를 통해 데이터베이스에 저장이 완료되었습니다.", r.tool_name))
-                        .await;
+                    let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.db_saved", "args": {"tool": r.tool_name}}))).await;
                 }
 
                 result_summary_md.push_str(&format!(
@@ -276,9 +259,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 ));
             }
 
-            let _ = log_tx
-                .send("[관찰] 툴 데이터를 확보하여 LLM에 재주입합니다.".to_string())
-                .await;
+            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tools_injected", "args": {}}))).await;
 
             // Inject the result as user system feedback
             history.push(ChatMessage {
@@ -303,7 +284,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
         self.save_transcript(session_id, &history);
         Ok((
-            "에이전트가 결론을 짓지 못하고 종료되었습니다.".to_string(),
+            "Agent Terminated without Conclusion.".to_string(),
             history,
         ))
     }

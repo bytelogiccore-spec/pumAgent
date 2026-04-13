@@ -56,7 +56,7 @@ impl Scheduler {
                         if ext == "json" {
                             if let Ok(sched) = serde_json::from_str::<ScheduleConfig>(&content) {
                                 let mut should_run = false;
-                                let mut next_exec = "알 수 없음".to_string();
+                                let mut next_exec = "Unknown".to_string();
 
                                 let last_run_dt = sched
                                     .last_run
@@ -68,7 +68,7 @@ impl Scheduler {
                                     if let Ok(end_dt) = end_str.parse::<DateTime<Utc>>() {
                                         if now > end_dt {
                                             is_expired = true;
-                                            next_exec = "종료됨 (Expired)".to_string();
+                                            next_exec = "Expired".to_string();
                                         }
                                     }
                                 }
@@ -90,7 +90,7 @@ impl Scheduler {
                                                 next_exec = format!("{} (Cron)", next_upcoming.format("%Y-%m-%d %H:%M:%S"));
                                             }
                                         } else {
-                                            next_exec = "크론 문법 에러".to_string();
+                                            next_exec = "Cron Syntax Error".to_string();
                                         }
                                     } else if let Some(interval) = sched.interval_seconds {
                                         if let Some(last) = last_run_dt {
@@ -113,7 +113,7 @@ impl Scheduler {
                                     sched.name, sched.description
                                 ));
                                 status_summary.push_str(&format!(
-                                    "- **{}**: 다음 실행 예정 ({})\n",
+                                    "- **{}**: Next execution scheduled ({})\n",
                                     sched.name, next_exec
                                 ));
 
@@ -128,7 +128,7 @@ impl Scheduler {
                                 file_name, content
                             ));
                             status_summary.push_str(&format!(
-                                "- **{}**: 기존 텍스트 마크다운 규칙 (시스템 시간 파악 불가)\n",
+                                "- **{}**: Legacy Markdown rule (Execution time unparseable)\n",
                                 file_name
                             ));
                         }
@@ -138,8 +138,8 @@ impl Scheduler {
         }
 
         if schedules_summary.is_empty() {
-            schedules_summary = "등록된 스케줄이 없습니다.".to_string();
-            status_summary = "등록된 스케줄이 없습니다.".to_string();
+            schedules_summary = "No schedules registered.".to_string();
+            status_summary = "No schedules registered.".to_string();
         }
 
         (pending_tasks, schedules_summary, status_summary)
