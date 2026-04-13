@@ -25,6 +25,14 @@ impl MoltbookTool {
     }
 
     fn load_credentials(&self) -> MoltbookCreds {
+        // Try OS Keyring Vault First
+        if let Ok(data) = crate::tools::vault_tool::VaultTool::get_secret("moltbook_creds") {
+            if let Ok(creds) = serde_json::from_str(&data) {
+                return creds;
+            }
+        }
+        
+        // Fallback or legacy file check
         if let Ok(data) = std::fs::read_to_string(self.credentials_path()) {
             if let Ok(creds) = serde_json::from_str(&data) {
                 return creds;
@@ -35,7 +43,13 @@ impl MoltbookTool {
 
     fn save_credentials(&self, creds: &MoltbookCreds) {
         if let Ok(data) = serde_json::to_string(creds) {
-            let _ = std::fs::write(self.credentials_path(), data);
+            let vault = crate::tools::vault_tool::VaultTool::new();
+            let _ = vault.set_secret("moltbook_creds", &data);
+            
+            // For security, remove the plain text credentials file if it exists
+            if self.credentials_path().exists() {
+                let _ = std::fs::remove_file(self.credentials_path());
+            }
         }
     }
 
