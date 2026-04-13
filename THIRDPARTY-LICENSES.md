@@ -14,6 +14,10 @@ Most Rust dependencies in this project are dual-licensed under the **MIT** and *
 - `rquest` (MIT / Apache-2.0)
 - `dbx-core` (MIT / Apache-2.0)
 - `sqlx` (MIT / Apache-2.0)
+- `rand` (MIT / Apache-2.0)
+- `regex` (MIT / Apache-2.0)
+- `chrono` (MIT / Apache-2.0)
+- `rhai` (MIT / Apache-2.0)
 
 *(A full detailed dependency tree is available by running `cargo tree` in the `src-tauri` directory).*
 
