@@ -463,3 +463,23 @@ pub async fn test_llm_connection(
         Err(e) => Err(e.to_string()),
     }
 }
+#[tauri::command]
+pub async fn list_vault_keys(state: State<'_, AgentState>) -> Result<Vec<String>, String> {
+    let vault = crate::tools::vault_tool::VaultTool::new(state.base_dir.clone());
+    Ok(vault.list_keys())
+}
+
+#[tauri::command]
+pub async fn set_vault_secret(state: State<'_, AgentState>, key: String, value: String) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err("Value cannot be empty.".into());
+    }
+    let vault = crate::tools::vault_tool::VaultTool::new(state.base_dir.clone());
+    vault.set_secret(&key, &value)
+}
+
+#[tauri::command]
+pub async fn delete_vault_secret(state: State<'_, AgentState>, key: String) -> Result<(), String> {
+    let vault = crate::tools::vault_tool::VaultTool::new(state.base_dir.clone());
+    vault.delete_secret(&key)
+}

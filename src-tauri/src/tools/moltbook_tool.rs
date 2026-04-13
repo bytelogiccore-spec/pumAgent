@@ -43,7 +43,7 @@ impl MoltbookTool {
 
     fn save_credentials(&self, creds: &MoltbookCreds) {
         if let Ok(data) = serde_json::to_string(creds) {
-            let vault = crate::tools::vault_tool::VaultTool::new();
+            let vault = crate::tools::vault_tool::VaultTool::new(self.base_dir.clone());
             let _ = vault.set_secret("moltbook_creds", &data);
             
             // For security, remove the plain text credentials file if it exists

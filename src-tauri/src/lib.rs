@@ -133,7 +133,7 @@ pub fn run() {
             let http_tool = crate::tools::http_tool::HttpTool::new();
             let script_tool = crate::tools::scripting_tool::ScriptingTool::new();
             let moltbook_tool = crate::tools::moltbook_tool::MoltbookTool::new(base_dir.clone());
-            let vault_tool = VaultTool::new();
+            let vault_tool = VaultTool::new(base_dir.clone());
 
             let state = AgentState {
                 multi_agent: Arc::new(MultiAgent::new(
@@ -279,7 +279,10 @@ pub fn run() {
             commands::fs::get_knowledge_quota,
             commands::agent::flush_db,
             commands::agent::translate_i18n,
-            commands::agent::stop_agent
+            commands::agent::stop_agent,
+            commands::agent::list_vault_keys,
+            commands::agent::set_vault_secret,
+            commands::agent::delete_vault_secret
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

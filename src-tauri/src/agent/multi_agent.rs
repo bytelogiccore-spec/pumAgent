@@ -234,7 +234,7 @@ mod tests {
         let http_tool = crate::tools::http_tool::HttpTool::new();
         let script_tool = crate::tools::scripting_tool::ScriptingTool::new();
         let moltbook_tool = crate::tools::moltbook_tool::MoltbookTool::new(std::path::PathBuf::from("."));
-        let vault_tool = crate::tools::vault_tool::VaultTool::new();
+        let vault_tool = crate::tools::vault_tool::VaultTool::new(std::path::PathBuf::from("."));
 
         let agent = MultiAgent::new(
             crawler,
