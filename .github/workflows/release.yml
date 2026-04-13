@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version_tag:
-        description: 'Target version tag (e.g., v0.1.0-beta). If left empty, it will auto-detect from package.json'
+        description: "Target version tag (e.g., v0.1.0-beta). If left empty, it will auto-detect from package.json"
         required: false
-        default: ''
+        default: ""
 
 jobs:
   build-tauri:
@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           - platform: ubuntu-22.04
-            args: ''
+            args: ""
           - platform: macos-latest
-            args: ''
+            args: ""
           - platform: windows-latest
-            args: ''
+            args: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -48,7 +48,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: "./src-tauri -> target"
 
       - name: Get Version
         id: get_version
@@ -67,8 +67,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ env.RELEASE_VERSION }}
-          releaseName: 'PumAgent Release ${{ env.RELEASE_VERSION }}'
-          releaseBody: 'Automated release for PumAgent ${{ env.RELEASE_VERSION }}'
+          releaseName: "PumAgent Release ${{ env.RELEASE_VERSION }}"
+          releaseBody: "Automated release for PumAgent ${{ env.RELEASE_VERSION }}"
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

@@ -11,7 +11,7 @@ import {
 import { t } from "./i18n.svelte";
 
 export interface AttachedFile {
-  type: 'image' | 'document';
+  type: "image" | "document";
   name: string;
   data: string;
   file: File;
@@ -31,7 +31,7 @@ export const appState = $state({
   logExpanded: true,
   sessionId: (() => {
     let now = new Date();
-    let pad = (n: number) => n.toString().padStart(2, '0');
+    let pad = (n: number) => n.toString().padStart(2, "0");
     return `${now.getFullYear().toString().slice(2)}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   })(),
   config: {
@@ -46,7 +46,8 @@ export const appState = $state({
     maxLoops: 3,
     language: "en",
     customLanguages: [] as string[],
-    systemPrompt: "You are a practical AI development assistant. Always respond in Korean.",
+    systemPrompt:
+      "You are a practical AI development assistant. Always respond in Korean.",
     searchProvider: "duckduckgo",
     tavilyApiKey: "",
     googleApiKey: "",
@@ -82,9 +83,14 @@ export const appState = $state({
     {
       role: "assistant",
       content: "",
-      logs: []
+      logs: [],
     },
-  ] as { role: string; content: string; logs?: string[]; images_base64?: string[] }[],
+  ] as {
+    role: string;
+    content: string;
+    logs?: string[];
+    images_base64?: string[];
+  }[],
   logs: [] as string[],
   isThinking: false,
   elapsedSec: 0,
@@ -102,7 +108,7 @@ export function addLog(msg: string) {
   let timeStr = now.toTimeString().split(" ")[0];
   let formatted = `[${timeStr}] ${msg}`;
   appState.logs = [...appState.logs, formatted];
-  
+
   if (appState.logs.length > 500) {
     appState.logs = appState.logs.slice(appState.logs.length - 500);
   }
@@ -122,7 +128,7 @@ export function addLog(msg: string) {
 export function showError(message: any) {
   if (message instanceof Error) {
     appState.globalError = message.message;
-  } else if (typeof message === 'string') {
+  } else if (typeof message === "string") {
     appState.globalError = message;
   } else {
     appState.globalError = JSON.stringify(message, null, 2);

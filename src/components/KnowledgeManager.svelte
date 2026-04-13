@@ -113,7 +113,7 @@
           <button class="sys-save-btn" onclick={() => (appState.showSysSidebar = !appState.showSysSidebar)} style="background:transparent; color:#1a1a1a; border:1px solid #1a1a1a; padding: 4px 8px; text-transform:none;">{appState.showSysSidebar ? t("knowledge.hideList") : t("knowledge.showList")}</button>
           <div style="font-weight:600;">{appState.viewingItemName}</div>
         </div>
-        {#if ["skills", "rules", "workflows", "brain", "schedules"].includes(appState.sysModalDomain)}
+        {#if ["skills", "rules", "workflows", "brain", "schedules", "vault"].includes(appState.sysModalDomain)}
           <button class="sys-save-btn" onclick={saveSysItem}>{t("knowledge.save")}</button>
         {/if}
       </div>
@@ -163,7 +163,7 @@
           </div>
         </div>
       {:else}
-        <textarea class="sys-textarea" bind:value={appState.viewingItemContent} placeholder={t("knowledge.ph_edit_content")} readonly={!["skills", "rules", "workflows", "brain", "schedules"].includes(appState.sysModalDomain)}></textarea>
+        <textarea class="sys-textarea" bind:value={appState.viewingItemContent} placeholder={appState.sysModalDomain === "vault" ? "Enter the new secret password here (will not be retrievable after saving)" : t("knowledge.ph_edit_content")} readonly={!["skills", "rules", "workflows", "brain", "schedules", "vault"].includes(appState.sysModalDomain)}></textarea>
       {/if}
     {/if}
   </div>

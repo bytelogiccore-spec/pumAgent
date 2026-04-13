@@ -22,16 +22,21 @@ export async function compressChatMemory(silent: boolean = false) {
     if (!silent) showError(t("sys.compress_error_count"));
     return;
   }
-  
+
   if (!silent && !confirm(t("sys.compress_confirm"))) return;
 
   appState.isThinking = true;
   addLog(t("sys.compress_start"));
-  
+
   try {
     let recentCount = 2; // retain very last user + assistant
-    let oldMessages = appState.messages.slice(0, appState.messages.length - recentCount);
-    let recentMessages = appState.messages.slice(appState.messages.length - recentCount);
+    let oldMessages = appState.messages.slice(
+      0,
+      appState.messages.length - recentCount,
+    );
+    let recentMessages = appState.messages.slice(
+      appState.messages.length - recentCount,
+    );
 
     let payload = {
       endpoints: appState.config.endpoints,
@@ -39,15 +44,15 @@ export async function compressChatMemory(silent: boolean = false) {
     };
 
     let summary: string = await invoke("compress_memory", { payload });
-    
+
     appState.messages = [
       {
         role: "assistant",
-        content: t("sys.compress_summary", { summary })
+        content: t("sys.compress_summary", { summary }),
       },
-      ...recentMessages
+      ...recentMessages,
     ];
-    
+
     addLog(t("sys.compress_done", { count: oldMessages.length }));
   } catch (err: any) {
     addLog(t("sys.compress_error", { err }));
@@ -91,7 +96,9 @@ export async function triggerHeartbeat() {
       registry_prompt: appState.config.registryPrompt,
     };
 
-    let result: string = await invoke("execute_background_scheduler", { payload });
+    let result: string = await invoke("execute_background_scheduler", {
+      payload,
+    });
 
     if (result === "No tasks") {
       // Memory compression during idle heartbeat (Prevent premature context loss)
@@ -133,7 +140,10 @@ export async function internalExecuteAgent() {
       registry_prompt: appState.config.registryPrompt,
       messages: [...appState.messages]
         .filter((m) => m.role === "user" || m.role === "assistant")
-        .filter((m, i, arr) => !(i === arr.length - 1 && m.role === "assistant" && !m.content)),
+        .filter(
+          (m, i, arr) =>
+            !(i === arr.length - 1 && m.role === "assistant" && !m.content),
+        ),
     };
 
     let results: any = await invoke("execute_agent_tools", { payload });
@@ -184,29 +194,44 @@ export async function submitQuery() {
   }
 
   let userQuery = appState.query;
-  
-  let textAttachments = appState.attachedFiles.filter(f => f.type === "document");
-  if (textAttachments.length > 0) {
-      let combined = "";
-      for (let file of textAttachments) {
-          if (file.data.startsWith("[첨부 파일 참조:")) {
-              combined += `\n\n${file.data}`;
-          } else {
-              combined += `\n\n--- [Attached Document: ${file.name}] ---\n${file.data}\n---`;
-          }
-      }
-      userQuery = `${userQuery}${combined}`;
-  }
-  
-  let imageAttachments = appState.attachedFiles.filter(f => f.type === "image").map(f => f.data);
 
-  appState.messages = [...appState.messages, { role: "user", content: userQuery, logs: [], images_base64: imageAttachments }];
-  appState.messages = [...appState.messages, { role: "assistant", content: "", logs: [] }];
+  let textAttachments = appState.attachedFiles.filter(
+    (f) => f.type === "document",
+  );
+  if (textAttachments.length > 0) {
+    let combined = "";
+    for (let file of textAttachments) {
+      if (file.data.startsWith("[첨부 파일 참조:")) {
+        combined += `\n\n${file.data}`;
+      } else {
+        combined += `\n\n--- [Attached Document: ${file.name}] ---\n${file.data}\n---`;
+      }
+    }
+    userQuery = `${userQuery}${combined}`;
+  }
+
+  let imageAttachments = appState.attachedFiles
+    .filter((f) => f.type === "image")
+    .map((f) => f.data);
+
+  appState.messages = [
+    ...appState.messages,
+    {
+      role: "user",
+      content: userQuery,
+      logs: [],
+      images_base64: imageAttachments,
+    },
+  ];
+  appState.messages = [
+    ...appState.messages,
+    { role: "assistant", content: "", logs: [] },
+  ];
   appState.query = "";
   appState.attachedFiles = [];
   appState.isThinking = true;
   appState.elapsedSec = 0;
-  
+
   if (appState.timerInterval !== null) clearInterval(appState.timerInterval);
   appState.timerInterval = setInterval(() => {
     appState.elapsedSec += 1;

@@ -48,7 +48,7 @@
       
       const mermaids = messageElement.querySelectorAll('.mermaid');
       if (mermaids.length > 0) {
-        await mermaid.run({ nodes: mermaids, suppressErrors: true });
+        await mermaid.run({ nodes: Array.from(mermaids) as HTMLElement[], suppressErrors: true });
       }
     } catch (e) {
       // ignore partial rendering errors during streaming

@@ -7,7 +7,8 @@ export async function interceptSlashCommand(cmd: string): Promise<boolean> {
   const command = parts[0].toLowerCase();
 
   if (command === "/settings" || command.startsWith("/setting_")) {
-    appState.sysModalDomain = command === "/settings" ? "setting_server" : command.substring(1);
+    appState.sysModalDomain =
+      command === "/settings" ? "setting_server" : command.substring(1);
     appState.sysModalTitle = t("settings.title");
     appState.sysModalItems = [];
     appState.sysModalOpen = true;
@@ -19,12 +20,35 @@ export async function interceptSlashCommand(cmd: string): Promise<boolean> {
     return true;
   }
 
+  if (command === "/vault") {
+    appState.sysModalDomain = "vault";
+    appState.sysModalTitle = "Secure Vault";
+    try {
+      let keys: string[] = await invoke("list_vault_keys");
+      appState.sysModalItems = keys.map((k: string) => ({
+        name: k,
+        content: null,
+      }));
+    } catch (e) {
+      appState.sysModalItems = [];
+    }
+    appState.sysModalOpen = true;
+    appState.viewingItemContent = null;
+    appState.viewingItemName = null;
+    appState.showSysSidebar = true;
+    appState.selectedLogs = [];
+    return true;
+  }
+
   if (command === "/brain") {
     appState.sysModalDomain = "brain";
     appState.sysModalTitle = t("nav.brain");
     try {
       let files: string[] = await invoke("list_brain_artifacts");
-      appState.sysModalItems = files.map((f: string) => ({ name: f, content: null }));
+      appState.sysModalItems = files.map((f: string) => ({
+        name: f,
+        content: null,
+      }));
     } catch (e) {
       appState.sysModalItems = [];
     }
@@ -42,7 +66,10 @@ export async function interceptSlashCommand(cmd: string): Promise<boolean> {
     appState.sysModalTitle = t("nav.logs");
     try {
       let files: string[] = await invoke("list_logs");
-      appState.sysModalItems = files.map((f: string) => ({ name: f, content: null }));
+      appState.sysModalItems = files.map((f: string) => ({
+        name: f,
+        content: null,
+      }));
     } catch (e) {
       appState.sysModalItems = [{ name: "Error", content: String(e) }];
     }
@@ -56,10 +83,15 @@ export async function interceptSlashCommand(cmd: string): Promise<boolean> {
   if (["/skills", "/rules", "/workflows", "/schedules"].includes(command)) {
     const domain = command.substring(1);
     appState.sysModalDomain = domain;
-    appState.sysModalTitle = t("sys.knowledge_title", { domain: domain.toUpperCase() });
+    appState.sysModalTitle = t("sys.knowledge_title", {
+      domain: domain.toUpperCase(),
+    });
     try {
       let files: string[] = await invoke("list_knowledge", { domain });
-      appState.sysModalItems = files.map((f: string) => ({ name: f, content: null }));
+      appState.sysModalItems = files.map((f: string) => ({
+        name: f,
+        content: null,
+      }));
     } catch (e) {
       appState.sysModalItems = [];
     }
@@ -87,9 +119,15 @@ export async function loadSysItem(name: string) {
     if (appState.sysModalDomain === "logs") {
       appState.viewingItemContent = await invoke("read_log", { name });
     } else if (appState.sysModalDomain === "brain") {
-      appState.viewingItemContent = await invoke("read_brain_artifact", { name });
+      appState.viewingItemContent = await invoke("read_brain_artifact", {
+        name,
+      });
+    } else if (appState.sysModalDomain === "vault") {
+      appState.viewingItemContent = "";
     } else if (
-      ["skills", "rules", "workflows", "schedules"].includes(appState.sysModalDomain)
+      ["skills", "rules", "workflows", "schedules"].includes(
+        appState.sysModalDomain,
+      )
     ) {
       appState.viewingItemContent = await invoke("read_knowledge", {
         domain: appState.sysModalDomain,
@@ -107,10 +145,17 @@ export async function deleteSysItem(name: string) {
   try {
     if (appState.sysModalDomain === "brain") {
       await invoke("delete_brain_artifact", { name });
+    } else if (appState.sysModalDomain === "vault") {
+      await invoke("delete_vault_secret", { key: name });
     } else {
-      await invoke("delete_knowledge", { domain: appState.sysModalDomain, name });
+      await invoke("delete_knowledge", {
+        domain: appState.sysModalDomain,
+        name,
+      });
     }
-    appState.sysModalItems = appState.sysModalItems.filter((i) => i.name !== name);
+    appState.sysModalItems = appState.sysModalItems.filter(
+      (i) => i.name !== name,
+    );
     if (appState.viewingItemName === name) {
       appState.viewingItemContent = null;
       appState.viewingItemName = null;
@@ -124,11 +169,19 @@ export async function deleteSysItem(name: string) {
 
 export async function deleteSelectedLogs() {
   if (appState.selectedLogs.length === 0) return;
-  if (!confirm(t("sys.del_logs_confirm", { count: appState.selectedLogs.length }))) return;
+  if (
+    !confirm(t("sys.del_logs_confirm", { count: appState.selectedLogs.length }))
+  )
+    return;
   try {
     await invoke("delete_logs", { names: appState.selectedLogs });
-    appState.sysModalItems = appState.sysModalItems.filter(i => !appState.selectedLogs.includes(i.name));
-    if (appState.viewingItemName && appState.selectedLogs.includes(appState.viewingItemName)) {
+    appState.sysModalItems = appState.sysModalItems.filter(
+      (i) => !appState.selectedLogs.includes(i.name),
+    );
+    if (
+      appState.viewingItemName &&
+      appState.selectedLogs.includes(appState.viewingItemName)
+    ) {
       appState.viewingItemContent = null;
       appState.viewingItemName = null;
     }
@@ -168,6 +221,12 @@ export async function saveSysItem() {
         name: appState.viewingItemName,
         content: appState.viewingItemContent || "",
       });
+    } else if (appState.sysModalDomain === "vault") {
+      await invoke("set_vault_secret", {
+        key: appState.viewingItemName,
+        value: appState.viewingItemContent || "",
+      });
+      appState.viewingItemContent = "";
     } else {
       await invoke("write_knowledge", {
         domain: appState.sysModalDomain,
@@ -184,21 +243,22 @@ export async function saveSysItem() {
 }
 
 export async function createSysItem() {
-  let promptMsg = appState.sysModalDomain === "schedules" 
-    ? t("sys.prompt_sched") 
-    : t("sys.prompt_file");
+  let promptMsg =
+    appState.sysModalDomain === "schedules"
+      ? t("sys.prompt_sched")
+      : t("sys.prompt_file");
   let name = prompt(promptMsg);
   if (!name) return;
-  
+
   if (appState.sysModalDomain === "schedules") {
     if (!name.endsWith(".json")) {
-       name = name.replace(/\.md$/, "") + ".json";
+      name = name.replace(/\.md$/, "") + ".json";
     }
   }
 
   let initialContent = "";
   if (appState.sysModalDomain === "schedules" && name.endsWith(".json")) {
-      initialContent = `{\n  "name": "New Schedule",\n  "interval_seconds": 3600,\n  "description": "Description...",\n  "task_prompt": "Instruction...",\n  "last_run": null\n}`;
+    initialContent = `{\n  "name": "New Schedule",\n  "interval_seconds": 3600,\n  "description": "Description...",\n  "task_prompt": "Instruction...",\n  "last_run": null\n}`;
   }
 
   try {
@@ -208,7 +268,16 @@ export async function createSysItem() {
         content: initialContent,
       });
       let files: string[] = await invoke("list_brain_artifacts");
-      appState.sysModalItems = files.map((f: string) => ({ name: f, content: null }));
+      appState.sysModalItems = files.map((f: string) => ({
+        name: f,
+        content: null,
+      }));
+    } else if (appState.sysModalDomain === "vault") {
+      let keys: string[] = await invoke("list_vault_keys");
+      appState.sysModalItems = keys.map((f: string) => ({
+        name: f,
+        content: null,
+      }));
     } else {
       await invoke("write_knowledge", {
         domain: appState.sysModalDomain,
@@ -218,7 +287,10 @@ export async function createSysItem() {
       let files: string[] = await invoke("list_knowledge", {
         domain: appState.sysModalDomain,
       });
-      appState.sysModalItems = files.map((f: string) => ({ name: f, content: null }));
+      appState.sysModalItems = files.map((f: string) => ({
+        name: f,
+        content: null,
+      }));
     }
     appState.viewingItemName = name;
     appState.viewingItemContent = initialContent;
@@ -232,41 +304,69 @@ export async function loadSettings() {
     const configData: any = await invoke("load_config");
     console.log("Loaded config:", configData);
     if (configData) {
-      if (configData.endpoints) appState.config.endpoints = configData.endpoints;
-      if (configData.planner_endpoint_id) appState.config.plannerEndpointId = configData.planner_endpoint_id;
-      if (configData.critic_endpoint_id) appState.config.criticEndpointId = configData.critic_endpoint_id;
-      if (configData.worker_endpoint_id) appState.config.workerEndpointId = configData.worker_endpoint_id;
-      if (configData.reflector_endpoint_id) appState.config.reflectorEndpointId = configData.reflector_endpoint_id;
-      if (configData.registry_endpoint_id) appState.config.registryEndpointId = configData.registry_endpoint_id;
+      if (configData.endpoints)
+        appState.config.endpoints = configData.endpoints;
+      if (configData.planner_endpoint_id)
+        appState.config.plannerEndpointId = configData.planner_endpoint_id;
+      if (configData.critic_endpoint_id)
+        appState.config.criticEndpointId = configData.critic_endpoint_id;
+      if (configData.worker_endpoint_id)
+        appState.config.workerEndpointId = configData.worker_endpoint_id;
+      if (configData.reflector_endpoint_id)
+        appState.config.reflectorEndpointId = configData.reflector_endpoint_id;
+      if (configData.registry_endpoint_id)
+        appState.config.registryEndpointId = configData.registry_endpoint_id;
 
       if (configData.max_loops) appState.config.maxLoops = configData.max_loops;
       if (configData.language) appState.config.language = configData.language;
-      if (configData.system_prompt) appState.config.systemPrompt = configData.system_prompt;
-      if (configData.search_provider) appState.config.searchProvider = configData.search_provider;
-      if (configData.tavily_api_key) appState.config.tavilyApiKey = configData.tavily_api_key;
-      if (configData.google_api_key) appState.config.googleApiKey = configData.google_api_key;
+      if (configData.system_prompt)
+        appState.config.systemPrompt = configData.system_prompt;
+      if (configData.search_provider)
+        appState.config.searchProvider = configData.search_provider;
+      if (configData.tavily_api_key)
+        appState.config.tavilyApiKey = configData.tavily_api_key;
+      if (configData.google_api_key)
+        appState.config.googleApiKey = configData.google_api_key;
       if (configData.google_cx) appState.config.googleCx = configData.google_cx;
-      
-      if (configData.use_multi_agent_workflow !== undefined) appState.config.useMultiAgentWorkflow = configData.use_multi_agent_workflow;
-      if (configData.use_think_mode !== undefined) appState.config.useThinkMode = configData.use_think_mode;
-      if (configData.planner_prompt) appState.config.plannerPrompt = configData.planner_prompt;
-      if (configData.critic_prompt) appState.config.criticPrompt = configData.critic_prompt;
-      if (configData.writer_prompt) appState.config.writerPrompt = configData.writer_prompt;
-      if (configData.reflector_prompt) appState.config.reflectorPrompt = configData.reflector_prompt;
-      if (configData.heartbeat_prompt) appState.config.heartbeatPrompt = configData.heartbeat_prompt;
-      if (configData.worker_prompt) appState.config.workerPrompt = configData.worker_prompt;
-      if (configData.registry_prompt) appState.config.registryPrompt = configData.registry_prompt;
-      if (configData.custom_languages) appState.config.customLanguages = configData.custom_languages;
-      
-      if (configData.heartbeat_enabled !== undefined) appState.config.heartbeatEnabled = configData.heartbeat_enabled;
-      if (configData.heartbeat_interval) appState.config.heartbeatInterval = configData.heartbeat_interval;
-      
-      if (configData.telegram_enabled !== undefined) appState.config.telegramEnabled = configData.telegram_enabled;
-      if (configData.telegram_bot_token) appState.config.telegramBotToken = configData.telegram_bot_token;
-      if (configData.telegram_chat_id) appState.config.telegramChatId = configData.telegram_chat_id;
 
-      if (configData.kb_rules_token_limit !== undefined) appState.config.kbRulesTokenLimit = configData.kb_rules_token_limit;
-      if (configData.kb_skills_token_limit !== undefined) appState.config.kbSkillsTokenLimit = configData.kb_skills_token_limit;
+      if (configData.use_multi_agent_workflow !== undefined)
+        appState.config.useMultiAgentWorkflow =
+          configData.use_multi_agent_workflow;
+      if (configData.use_think_mode !== undefined)
+        appState.config.useThinkMode = configData.use_think_mode;
+      if (configData.planner_prompt)
+        appState.config.plannerPrompt = configData.planner_prompt;
+      if (configData.critic_prompt)
+        appState.config.criticPrompt = configData.critic_prompt;
+      if (configData.writer_prompt)
+        appState.config.writerPrompt = configData.writer_prompt;
+      if (configData.reflector_prompt)
+        appState.config.reflectorPrompt = configData.reflector_prompt;
+      if (configData.heartbeat_prompt)
+        appState.config.heartbeatPrompt = configData.heartbeat_prompt;
+      if (configData.worker_prompt)
+        appState.config.workerPrompt = configData.worker_prompt;
+      if (configData.registry_prompt)
+        appState.config.registryPrompt = configData.registry_prompt;
+      if (configData.custom_languages)
+        appState.config.customLanguages = configData.custom_languages;
+
+      if (configData.heartbeat_enabled !== undefined)
+        appState.config.heartbeatEnabled = configData.heartbeat_enabled;
+      if (configData.heartbeat_interval)
+        appState.config.heartbeatInterval = configData.heartbeat_interval;
+
+      if (configData.telegram_enabled !== undefined)
+        appState.config.telegramEnabled = configData.telegram_enabled;
+      if (configData.telegram_bot_token)
+        appState.config.telegramBotToken = configData.telegram_bot_token;
+      if (configData.telegram_chat_id)
+        appState.config.telegramChatId = configData.telegram_chat_id;
+
+      if (configData.kb_rules_token_limit !== undefined)
+        appState.config.kbRulesTokenLimit = configData.kb_rules_token_limit;
+      if (configData.kb_skills_token_limit !== undefined)
+        appState.config.kbSkillsTokenLimit = configData.kb_skills_token_limit;
 
       appState.config.isFirstRun = false;
       addLog(t("sys.config_loaded"));

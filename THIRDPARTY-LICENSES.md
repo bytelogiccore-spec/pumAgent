@@ -5,7 +5,9 @@ This project is built using various open-source third-party dependencies from bo
 Below is a summary of the major libraries used and their respective licenses:
 
 ## Rust Dependencies
+
 Most Rust dependencies in this project are dual-licensed under the **MIT** and **Apache-2.0** licenses. Primary libraries include:
+
 - `tauri` (MIT / Apache-2.0)
 - `tokio` (MIT)
 - `serde` (MIT / Apache-2.0)
@@ -19,10 +21,12 @@ Most Rust dependencies in this project are dual-licensed under the **MIT** and *
 - `chrono` (MIT / Apache-2.0)
 - `rhai` (MIT / Apache-2.0)
 
-*(A full detailed dependency tree is available by running `cargo tree` in the `src-tauri` directory).*
+_(A full detailed dependency tree is available by running `cargo tree` in the `src-tauri` directory)._
 
 ## Node.js / Frontend Dependencies
+
 Most Node.js frontend dependencies are licensed under the **MIT** license. Primary libraries include:
+
 - `svelte` (MIT)
 - `vite` (MIT)
 - `typescript` (Apache-2.0)
@@ -30,7 +34,8 @@ Most Node.js frontend dependencies are licensed under the **MIT** license. Prima
 - `dompurify` (Apache-2.0 / MPL-2.0)
 - `marked` (MIT)
 
-*(A full list of frontend dependencies is available in `package.json` with details accessible via `npm list`).*
+_(A full list of frontend dependencies is available in `package.json` with details accessible via `npm list`)._
 
 ---
+
 Full license texts for all third-party dependencies can typically be found within their downloaded packages or by visiting their respective source code repositories on `crates.io` and `npmjs.com`.

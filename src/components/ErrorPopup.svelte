@@ -23,7 +23,7 @@
 
 {#if appState.globalError}
   <div class="error-overlay" onclick={closePopup} role="button" tabindex="0" onkeypress={(e) => e.key === 'Enter' && closePopup()}>
-    <div class="error-modal" onclick={(e) => e.stopPropagation()} role="dialog">
+    <div class="error-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
       <div class="error-header">
         <div class="error-title">
           <span class="icon">⚠️</span> Error Occurred

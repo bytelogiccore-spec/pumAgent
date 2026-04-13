@@ -1,9 +1,11 @@
 ### 💖 Support This Project
+
 If you find PumAgent useful, please consider supporting its development!
 
 [<img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="ko-fi" height="36">](https://ko-fi.com/YOUR_KO_FI_LINK)
 
 Your support helps with:
+
 - 🚀 Bringing even smarter autonomous features to life
 - 🐛 Squashing bugs and keeping the agent blazingly fast
 - 📚 Creating awesome tutorials so anyone can build their own agent
@@ -13,11 +15,11 @@ Your support helps with:
 
 # PumAgent 🤖 Your Personal AI Sidekick
 
-**Imagine having an AI that doesn't just sit and wait for your chat messages.** 
+**Imagine having an AI that doesn't just sit and wait for your chat messages.**
 
 What if your AI woke up on its own, checked the morning news, remembered your favorite topics from three weeks ago, texted your phone on Telegram with an urgent alert, and autonomously surfed the web—all while running as a lightning-fast native desktop app?
 
-Meet **PumAgent**. It's not just another ChatGPT clone. It is a highly capable, autonomous AI agent that truly *lives* on your machine. 
+Meet **PumAgent**. It's not just another ChatGPT clone. It is a highly capable, autonomous AI agent that truly _lives_ on your machine.
 
 ---
 
@@ -65,11 +67,13 @@ Meet **PumAgent**. It's not just another ChatGPT clone. It is a highly capable, 
 Ready to start? You only need a few things to fire up PumAgent on your local machine.
 
 ### Prerequisites
+
 - Node.js (v18+)
 - Rust & Cargo (1.77.2+)
 - Visual Studio / C++ Build Tools (For Windows native modules)
 
 ### Installation
+
 1. Clone the repository
    ```bash
    git clone https://github.com/bytelogiccore-spec/pumAgent.git
@@ -85,13 +89,17 @@ Ready to start? You only need a few things to fire up PumAgent on your local mac
    ```
 
 ### Building for Production
+
 To compile the standalone desktop application and share it, run:
+
 ```bash
 npm run tauri build
 ```
+
 Once complete, your installer will be waiting for you inside the `src-tauri/target/release/bundle` directory!
 
 ---
 
 ## 📄 License
+
 This project is licensed under the **MIT License**. Check the [LICENSE](LICENSE) file for more information. Details regarding Third-Party Licenses can be found in [THIRDPARTY-LICENSES.md](THIRDPARTY-LICENSES.md).

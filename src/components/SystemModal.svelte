@@ -42,6 +42,9 @@
         <button class="sys-link" class:active={appState.sysModalDomain === "brain"} onclick={() => interceptSlashCommand("/brain")}>{t("nav.brain")}</button>
         <button class="sys-link" class:active={appState.sysModalDomain === "logs"} onclick={() => interceptSlashCommand("/logs")}>{t("nav.logs")}</button>
 
+        <div style="font-size: 0.8rem; color: #a1a1aa; font-weight: bold; margin-top: 16px; margin-bottom: 4px;">SECURITY & SECRETS</div>
+        <button class="sys-link" class:active={appState.sysModalDomain === "vault"} onclick={() => interceptSlashCommand("/vault")}>🔑 Vault (Keyring)</button>
+
         {#if appState.kbQuota}
         <div style="margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 8px;">
           <div style="font-size: 0.75rem; color: #a1a1aa; font-weight: bold; text-transform: uppercase;">Context Quota</div>
