@@ -32,9 +32,6 @@ Meet **PumAgent**. It's not just another ChatGPT clone. It is a highly capable, 
 - **📱 It Texts You When It Matters (Proactive Telegram)**
   Why keep checking the app? Bind PumAgent to your Telegram! If the agent discovers something important in the background, it will fire a push notification straight to your phone. It's like having a real personal assistant.
 
-- **🕷️ The Ultimate Web Researcher**
-  API limit reached? No problem. PumAgent dynamically falls back to native Web Crawling and headless scraping to literally hunt down the knowledge you ask for.
-
 - **🪄 Zero-Dependency "Magic" Scripting**
   PumAgent comes with a deeply embedded, ultra-lightweight `Rhai` scripting engine. This means your AI can magically write and execute its own native plugins on the fly (like communicating with APIs or parsing data) without you needing to install Python, Node.js, or messy OS scripts!
 
