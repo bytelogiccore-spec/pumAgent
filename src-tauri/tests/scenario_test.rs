@@ -28,19 +28,19 @@ async fn test_moltbook_feed_scenario() {
 
     println!("--------------------------------------------------");
     println!("[TEST PHASE 2] LLM 파이프라인 (Planner) 도구 호출 시나리오 테스트");
-    let prompt = r#"[CRITICAL TOOL INSTRUCTIONS & WORKFLOW RULES]
-1. You are the PLANNER and RESEARCHER. Your job is to gather data using tools.
-2. You have the following tools:
-   - "moltbook": (action: "feed", args: {}) -> Natively interact with Moltbook API (social network for AI agents). Use 'feed' to read the latest global timeline.
-3. To use a tool, output ONLY the following JSON block format:
-```json
-{ "tool": "moltbook", "action": "feed", "args": {} }
-```
-4. ONLY output JSON blocks when you need more information."#;
+    let actual_prompt = app_lib::agent::prompts::build_single_agent_prompt(
+        "You are the PLANNER and RESEARCHER. Your job is to gather data using tools.", // system_prompt
+        "None", // skills
+        "2026-04-13T12:00:00Z", // current_time
+        "None", // schedules
+        "Korean", // lang_name
+        "한국어", // lang_native
+        "None" // brain
+    );
 
     // AI에게 시나리오 던지기
     let response = client.chat(&vec![
-        ChatMessage { role: "system".into(), content: prompt.into(), images_base64: None },
+        ChatMessage { role: "system".into(), content: actual_prompt.clone(), images_base64: None },
         ChatMessage { role: "user".into(), content: "몰트북 최신피드 5개 조사해줘".into(), images_base64: None },
     ], 0.7).await.expect("LLM 서버와 통신 실패 (llama-server가 켜져 있는지 확인하세요)");
 
@@ -53,6 +53,33 @@ async fn test_moltbook_feed_scenario() {
     let contains_action = text.contains("\"action\": \"feed\"") || text.contains("\"action\":\"feed\"");
     
     assert!(contains_tool && contains_action, "LLM이 도구 사용 지침(JSON format)을 준수하지 않았습니다!");
+
+    println!("--------------------------------------------------");
+    println!("[TEST PHASE 3] 플래너 도구 에러 발생 시 자가 디버깅(Recovery) 시나리오");
+    
+    // 만약 실제 툴이 에러가 났다고 가정한 피드백 루프
+    let artificial_error = "Tool execution failed! Error: [Moltbook Error: 401 Unauthorized - Invalid Access Token]. Please analyze the cause of this error and output a new JSON block using a different tool (like 'search') to find a solution, or explain the error.";
+    
+    let mut debug_history = vec![
+        ChatMessage { role: "system".into(), content: actual_prompt.clone(), images_base64: None },
+        ChatMessage { role: "user".into(), content: "몰트북 최신피드 5개 조사해줘".into(), images_base64: None },
+        ChatMessage { role: "assistant".into(), content: text, images_base64: None },
+        ChatMessage { role: "user".into(), content: artificial_error.into(), images_base64: None },
+    ];
+
+    let debug_response = client.chat(&debug_history, 0.7).await.expect("LLM 통신 실패");
+    println!("에러 발생 후 플래너의 분석/복구 반응:\n{}", debug_response.content);
+
+    // 검증: LLM이 에러를 인식하고 search 등의 대안을 탐색하거나 에러를 분석하는 내용이 들어있는지 확인
+    let lower_resp = debug_response.content.to_lowercase();
+    assert!(
+        lower_resp.contains("tool") || 
+        lower_resp.contains("401") || 
+        lower_resp.contains("unauthorized") ||
+        lower_resp.contains("token") ||
+        lower_resp.contains("search"),
+        "LLM이 에러의 원인을 찾거나 우회하려는 시도를 하지 않았습니다!"
+    );
 
     println!("--------------------------------------------------");
     println!("ALL SCENARIOS PASSED SUCCESSFULLY! 🚀");
