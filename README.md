@@ -40,6 +40,17 @@ Meet **PumAgent**. It's not just another ChatGPT clone. It is a highly capable, 
 
 ---
 
+## 🆚 Why PumAgent over others? (AutoGPT, OpenDevin, etc.)
+
+- **Heavy Python Server ❌ vs Native Desktop App ⭕**
+  No Docker containers or messy Python environment setups. PumAgent is a pre-compiled, self-contained desktop app built in Rust. It operates with a fraction of the RAM & CPU overhead compared to typical web-based agent frameworks.
+- **Passive Chatbot ❌ vs Proactive Sidekick ⭕**
+  You don't need to stare at a web UI. Give PumAgent a continuous background schedule and watch it come alive. It runs autonomously and will proactively message your phone via Telegram if it spots something important.
+- **Flawless Memory Architecture (Anti-Splintering)**
+  Instead of relying solely on messy vector databases that hallucinate over time, PumAgent uses a heavily instructed Key-Value artifact system enforcing "Anti-Splintering". It constantly updates its precise rulebooks without losing its mind.
+
+---
+
 ## 🛠️ Technology Stack
 
 - **Frontend**: Svelte 5 + Vite + TypeScript
