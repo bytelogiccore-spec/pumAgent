@@ -49,6 +49,7 @@ impl super::Orchestrator {
         let reflector_res = reflector_res_result.unwrap_or_else(|_| LLMResult {
             content: "NO_MEMORY_NEEDED".to_string(),
             raw: serde_json::Value::Null,
+            native_tool_calls: vec![],
         });
 
         let ai_text = reflector_res.content.clone();

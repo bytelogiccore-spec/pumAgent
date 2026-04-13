@@ -1,4 +1,4 @@
-use crate::agent::llm_client::{ChatMessage, LLMResult};
+use crate::agent::llm_client::ChatMessage;
 use crate::agent::parser::extract_json_blocks;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -42,29 +42,8 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
 [CRITICAL TOOL INSTRUCTIONS & WORKFLOW RULES]
 1. You are the PLANNER and RESEARCHER. Your job is to gather data using tools.
-2. You have the following tools:
-   - "search": (action: "query", args: {{"query": "string", "time_range": "d|w|m|y"}}) -> Google Search for finding external information.
-   - "crawl4ai": (action: "scrape", args: {{"url": "string"}}) -> Read webpage content. **CRITICAL: If the user provides a direct URL (like a github link, article, etc.), ALWAYS use `crawl4ai` FIRST to scrape the exact page instead of searching!**
-   - "brain": (action: "list", args: {{}}) -> List all your long-term memory artifact files.
-   - "brain": (action: "read", args: {{"name": "filename.md"}}) -> Read the precise content of a specific memory artifact file.
-   - "brain": (action: "write_artifact", args: {{"name": "filename.md", "content": "markdown string"}}) -> Create or overwrite a semantic long-term memory document. CRITICAL: To prevent memory splintering, if a file for a similar topic already exists in [LONG TERM MEMORY], you MUST `read` it first, merge the new data, and overwite it using the same filename! DO NOT create `topic_2.md` or similar fragmented files.
-   - "terminal": (action: "execute", args: {{"command": "string"}}) -> Execute Shell commands. *WARNING: You are sandboxed to the `./Work/` folder.*
-   - "knowledge": (action: "read"|"write"|"list"|"delete", args: {{"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}}) -> Manage your own logic and rules by writing to the knowledge base! ANTI-SPLINTERING: Always read and overwrite existing items instead of creating _v2.
-     * IF the user asks to save a rule, skill, workflow, or schedule task, YOU MUST use the `knowledge` tool to `write` it!
-     * CRITICAL: If the user asks to schedule a periodic repeating task (e.g. "every 5 minutes"), YOU MUST set `domain="schedules"`. DO NOT use `workflows` for periodic tasks.
-     * CRITICAL: If domain='schedules', `content` MUST be a JSON string EXACTLY matching this schema: `{{\"name\": \"str\", \"interval_seconds\": num (optional), \"cron_expression\": \"str (optional)\", \"description\": \"str\", \"task_prompt\": \"Exact prompt to execute\", \"end_date\": \"ISO8601 string or null\"}}`
-   - "telegram": (action: "send_message", args: {{"message": "string"}}) -> Send a proactive push notification to the user's mobile Telegram. Use this immediately if you discover pending tasks or important alerts during a heartbeat/background loop.
-3. To use a tool, output ONLY the following JSON block format (you may use multiple blocks):
-```json
-{{
-  "tool": "search",
-  "action": "query",
-  "args": {{ "query": "your search query here" }}
-}}
-```
-4. ONLY output JSON blocks when you need more information.
-   - If you do not need tools (e.g., simple greetings, casual chat), simply reply naturally to the user and DO NOT output JSON and DO NOT output "DONE".
-   - If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE".
+2. If you do not need tools (e.g., simple greetings, casual chat), simply reply naturally to the user and DO NOT output "DONE".
+3. If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE".
 
 [LONG TERM MEMORY (BRAIN)]
 {brain}
@@ -103,7 +82,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
         // Local state for failover routing caching during this session
         let mut active_planner_id = self.routing.planner_id.clone();
         let mut active_critic_id = self.routing.critic_id.clone();
-        let active_writer_id = self.routing.writer_id.clone();
+        let mut active_writer_id = self.routing.writer_id.clone();
         let _active_worker_id = self.routing.worker_id.clone();
 
         loop {
@@ -114,7 +93,10 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                         serde_json::json!({"key": "log.agent_stopped_by_user", "args": {}})
                     ))
                     .await;
-                return Ok(("[USER_STOPPED]".to_string(), history));
+                return Ok((
+                    format!("i18n:{}", serde_json::json!({"key": "chat.agent_stopped", "args": {}})),
+                    history,
+                ));
             }
 
             loop_count += 1;
@@ -150,52 +132,19 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 });
             }
 
-            let _ = log_tx
-                .send(format!(
-                    "i18n:{}",
-                    serde_json::json!({"key": "log.planner_planning", "args": {"step": loop_count}})
-                ))
-                .await;
+            let planner_res = self.run_planner_phase(
+                &history,
+                &mut active_planner_id,
+                &log_tx,
+                loop_count,
+            ).await?;
 
-            let mut planner_res_result = self
-                .get_llm_client_by_id(&active_planner_id)
-                .chat(&history, 0.7)
-                .await;
-            if planner_res_result.is_err() {
-                let err = planner_res_result.as_ref().unwrap_err();
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.planner_fallback", "args": {"err": err.to_string()}}))).await;
-
-                for fallback_ep in self.get_fallback_endpoints(&active_planner_id) {
-                    planner_res_result = crate::agent::llm_client::LLMClient::new(
-                        fallback_ep.api_url.clone(),
-                        fallback_ep.model.clone(),
-                        fallback_ep.api_key.clone(),
-                    )
-                    .chat(&history, 0.7)
-                    .await;
-                    if planner_res_result.is_ok() {
-                        active_planner_id = fallback_ep.id.clone();
-                        let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
-                        break;
-                    }
-                }
+            let mut json_blocks = planner_res.native_tool_calls.clone();
+            
+            // AI Hallucination Fallback: If native processing yields 0 tools but there's a JSON block
+            if json_blocks.is_empty() {
+                json_blocks = extract_json_blocks(&planner_res.content);
             }
-
-            let planner_res = match planner_res_result {
-                Ok(r) => r,
-                Err(e) => {
-                    let err_msg = format!("Planner LLM Final Failure: {}", e);
-                    let _ = log_tx
-                        .send(format!(
-                            "i18n:{}",
-                            serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}})
-                        ))
-                        .await;
-                    return Err(err_msg);
-                }
-            };
-
-            let json_blocks = extract_json_blocks(&planner_res.content);
 
             if json_blocks.is_empty() {
                 let text_res = planner_res.content.trim();
@@ -224,59 +173,14 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     ))
                     .await;
                 // Run Writer Agent
-                let fallback_writer_prompt_string = crate::agent::prompts::get_fallback_writer_prompt(&lang_name);
-                let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt_string);
-
-                let writer_prompt = ChatMessage {
-                    role: "system".to_string(),
-                    content: writer_system.to_string(),
-                    images_base64: None,
-                };
-                let mut writer_history = history.clone();
-                writer_history.insert(0, writer_prompt);
-                
-                let writer_directive = crate::agent::prompts::get_writer_final_directive(&lang_name);
-                writer_history.push(ChatMessage {
-                    role: "user".to_string(),
-                    content: writer_directive,
-                    images_base64: None,
-                });
-
-                let _ = log_tx
-                    .send(format!(
-                        "i18n:{}",
-                        serde_json::json!({"key": "log.writer_writing", "args": {}})
-                    ))
-                    .await;
-                let mut writer_res_result = self
-                    .get_llm_client_by_id(&active_writer_id)
-                    .chat(&writer_history, 0.7)
-                    .await;
-                if writer_res_result.is_err() {
-                    let _ = log_tx
-                        .send(format!(
-                            "i18n:{}",
-                            serde_json::json!({"key": "log.writer_fallback", "args": {}})
-                        ))
-                        .await;
-                    for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
-                        writer_res_result = crate::agent::llm_client::LLMClient::new(
-                            fallback_ep.api_url.clone(),
-                            fallback_ep.model.clone(),
-                            fallback_ep.api_key.clone(),
-                        )
-                        .chat(&writer_history, 0.7)
-                        .await;
-                        if writer_res_result.is_ok() {
-                            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
-                            break;
-                        }
-                    }
-                }
-                let writer_res = writer_res_result.unwrap_or_else(|_| LLMResult {
-                    content: planner_res.content.clone(),
-                    raw: serde_json::Value::Null,
-                });
+                let (writer_res, _) = self.run_writer_phase(
+                    writer_prompt_opt,
+                    &lang_name,
+                    history.clone(),
+                    &mut active_writer_id,
+                    &log_tx,
+                    true,
+                ).await.unwrap();
 
                 history.push(ChatMessage {
                     role: "assistant".to_string(),
@@ -323,70 +227,13 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
             }
 
             // Critic Agent Phase
-            let _ = log_tx
-                .send(format!(
-                    "i18n:{}",
-                    serde_json::json!({"key": "log.critic_validating", "args": {}})
-                ))
-                .await;
-
-            let query = user_messages
-                .iter()
-                .rfind(|m| m.role == "user")
-                .map(|m| m.content.clone())
-                .unwrap_or_else(|| "".to_string());
-            let fallback_critic_prompt = "You are a strict CRITIC Agent. Read the user's main query: '{QUERY}'.\nNow read these tool execution results:\n{RESULT_SUMMARY}\n\nIf the results contain the exact facts needed to fully answer the query, reply exactly: 'STATUS: PASS'. If the results are outdated, irrelevant, or missing info, reply 'STATUS: FAIL' followed by strict feedback instructing the Planner on what to search differently (e.g. search specific year, different keywords). Reply in English.";
-            let base_critic = critic_prompt_opt.unwrap_or(fallback_critic_prompt);
-            let critic_prompt = base_critic
-                .replace("{QUERY}", &query)
-                .replace("{RESULT_SUMMARY}", &result_summary_md);
-
-            let mut critic_res_result = self
-                .get_llm_for_critic()
-                .chat(
-                    &[ChatMessage {
-                        role: "user".to_string(),
-                        content: critic_prompt.clone(),
-                        images_base64: None,
-                    }],
-                    0.2,
-                )
-                .await;
-
-            if critic_res_result.is_err() {
-                let _ = log_tx
-                    .send(format!(
-                        "i18n:{}",
-                        serde_json::json!({"key": "log.critic_fallback", "args": {}})
-                    ))
-                    .await;
-                for fallback_ep in self.get_fallback_endpoints(&active_critic_id) {
-                    critic_res_result = crate::agent::llm_client::LLMClient::new(
-                        fallback_ep.api_url.clone(),
-                        fallback_ep.model.clone(),
-                        fallback_ep.api_key.clone(),
-                    )
-                    .chat(
-                        &[ChatMessage {
-                            role: "user".to_string(),
-                            content: critic_prompt.clone(),
-                            images_base64: None,
-                        }],
-                        0.2,
-                    )
-                    .await;
-                    if critic_res_result.is_ok() {
-                        active_critic_id = fallback_ep.id.clone();
-                        let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
-                        break;
-                    }
-                }
-            }
-
-            let critic_res = critic_res_result.unwrap_or_else(|_| LLMResult {
-                content: "STATUS: PASS".to_string(),
-                raw: serde_json::Value::Null,
-            });
+            let critic_res = self.run_critic_phase(
+                critic_prompt_opt,
+                &user_messages,
+                &result_summary_md,
+                &mut active_critic_id,
+                &log_tx,
+            ).await.unwrap();
 
             if critic_res.content.contains("STATUS: PASS") {
                 let _ = log_tx
@@ -401,54 +248,15 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                     images_base64: None,
                 });
 
-                // Run Writer
-                let fallback_writer_prompt = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}.", lang_name);
-                let writer_prompt = ChatMessage {
-                    role: "system".to_string(),
-                    content: writer_prompt_opt
-                        .unwrap_or(&fallback_writer_prompt)
-                        .to_string(),
-                    images_base64: None,
-                };
-                let mut writer_history = history.clone();
-                writer_history.insert(0, writer_prompt);
-                writer_history.push(ChatMessage { role: "user".to_string(), content: format!("The user's request has been fulfilled or the data is ready. Please provide the final response to the user in {}. DO NOT unnecessarily repeat conversational history. Focus ONLY on what was just done or discovered.", lang_name), images_base64: None });
-
-                let _ = log_tx
-                    .send(format!(
-                        "i18n:{}",
-                        serde_json::json!({"key": "log.writer_summarizing", "args": {}})
-                    ))
-                    .await;
-                let mut writer_res_result = self
-                    .get_llm_client_by_id(&active_writer_id)
-                    .chat(&writer_history, 0.7)
-                    .await;
-                if writer_res_result.is_err() {
-                    let _ = log_tx
-                        .send(format!(
-                            "i18n:{}",
-                            serde_json::json!({"key": "log.writer_fallback", "args": {}})
-                        ))
-                        .await;
-                    for fallback_ep in self.get_fallback_endpoints(&active_writer_id) {
-                        writer_res_result = crate::agent::llm_client::LLMClient::new(
-                            fallback_ep.api_url.clone(),
-                            fallback_ep.model.clone(),
-                            fallback_ep.api_key.clone(),
-                        )
-                        .chat(&writer_history, 0.7)
-                        .await;
-                        if writer_res_result.is_ok() {
-                            let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.fallback_success", "args": {"model": fallback_ep.name}}))).await;
-                            break;
-                        }
-                    }
-                }
-                let writer_res = writer_res_result.unwrap_or_else(|_| LLMResult {
-                    content: "Writer Error".to_string(),
-                    raw: serde_json::Value::Null,
-                });
+                // Run Writer Phase
+                let (writer_res, _) = self.run_writer_phase(
+                    writer_prompt_opt,
+                    &lang_name,
+                    history.clone(),
+                    &mut active_writer_id,
+                    &log_tx,
+                    false,
+                ).await.unwrap();
 
                 history.push(ChatMessage {
                     role: "assistant".to_string(),
@@ -479,7 +287,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
 
         self.save_transcript(session_id.clone(), &history);
         Ok((
-            "Agent Pipeline Terminated without Conclusion.".to_string(),
+            format!("i18n:{}", serde_json::json!({"key": "chat.agent_terminated", "args": {}})),
             history,
         ))
     }

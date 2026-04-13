@@ -62,6 +62,116 @@ impl MultiAgent {
         }
     }
 
+    pub fn get_tool_schemas(&self) -> Vec<serde_json::Value> {
+        vec![
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "description": "Google Search for finding external information.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["query"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "crawl4ai",
+                    "description": "Read webpage content. CRITICAL: For URLs, use this FIRST before searching.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["scrape"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "brain",
+                    "description": "Manage long-term memory artifacts (list, read, write_artifact).",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["list", "read", "write_artifact"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "terminal",
+                    "description": "Execute Shell commands.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["execute"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "knowledge",
+                    "description": "Manage rules, workflows, schedules.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["read", "write", "list", "delete"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "telegram",
+                    "description": "Send notifications to Telegram.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["send_message"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "moltbook",
+                    "description": "Interact with Moltbook API (social network). actions include 'status', 'register', 'home', 'search', 'feed', 'create_post', 'create_comment', 'verify'.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["status", "register", "home", "search", "feed", "create_post", "create_comment", "verify"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            })
+        ]
+    }
+
     pub async fn execute_tools(
         &self,
         requests: Vec<Value>,

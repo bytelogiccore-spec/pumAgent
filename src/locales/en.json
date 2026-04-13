@@ -181,5 +181,8 @@
   "log.reflector_no_tools": "[Reflector] No actionable operations found.",
   "log.reflector_executing": "[Reflector] Processing {count} background operations.",
   "log.reflector_db_saved": "[DB Background] 💾 Data unified via {tool} tool.",
-  "log.reflector_done": "[Reflector] Review completed."
+  "log.reflector_done": "[Reflector] Review completed.",
+  "chat.agent_stopped": "⛔ Execution stopped by user.",
+  "chat.agent_llm_fatal": "⚠️ AI Inference Failed: {err}",
+  "chat.agent_terminated": "⚠️ Pipeline terminated without conclusion."
 }

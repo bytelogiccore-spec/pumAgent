@@ -33,6 +33,11 @@ impl MoltbookTool {
             }
         }
 
+        // Try Environment Variable (Useful for CI/CD or Isolated Tests)
+        if let Ok(env_key) = std::env::var("MOLTBOOK_API_KEY") {
+            return MoltbookCreds { api_key: Some(env_key), agent_name: None };
+        }
+
         // Fallback or legacy file check
         if let Ok(data) = std::fs::read_to_string(self.credentials_path()) {
             if let Ok(creds) = serde_json::from_str::<MoltbookCreds>(&data) {
@@ -69,6 +74,7 @@ impl MoltbookTool {
     ) -> Result<String, Box<dyn Error + Send + Sync>> {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
+            .user_agent("PumAgent/1.0 (Windows NT 10.0; Win64; x64)")
             .build()?;
 
         let url = format!("https://www.moltbook.com/api/v1{}", path);
@@ -82,42 +88,11 @@ impl MoltbookTool {
         };
 
         if use_auth {
-            let mut creds = self.load_credentials();
-            if creds.api_key.is_none() {
-                // Auto register natively to prevent AI loop hallucination
-                let random_suffix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() % 1000000;
-                let random_name = format!("PumAgent-{:06}", random_suffix);
-                let reg_client = Client::new();
-                let reg_body = serde_json::json!({
-                    "name": random_name,
-                    "description": "Autonomous Agent"
-                });
-                match reg_client.post("https://www.moltbook.com/api/v1/agents/register").json(&reg_body).send().await {
-                    Ok(resp) => {
-                        let text = resp.text().await.unwrap_or_default();
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) {
-                            if let Some(key) = parsed.get("agent").and_then(|a| a.get("api_key")).and_then(|k| k.as_str()) {
-                                creds = MoltbookCreds {
-                                    api_key: Some(key.to_string()),
-                                    agent_name: Some(random_name.clone()),
-                                };
-                                self.save_credentials(&creds);
-                            } else {
-                                let err_msg = parsed.get("message").and_then(|m| m.as_str()).unwrap_or(&text);
-                                return Err(format!("Auto-register API rejected: {}", err_msg).into());
-                            }
-                        } else {
-                            return Err(format!("Auto-register API invalid JSON: {}", text).into());
-                        }
-                    },
-                    Err(e) => return Err(format!("Auto-register HTTP failed: {}", e).into()),
-                }
-            }
-
+            let creds = self.load_credentials();
             if let Some(key) = creds.api_key {
                 request = request.header("Authorization", format!("Bearer {}", key));
             } else {
-                return Err("Failed to auto-register. No Moltbook API key found.".into());
+                return Err("Moltbook Authentication Required: No API key found. Please register an account first.".into());
             }
         }
 

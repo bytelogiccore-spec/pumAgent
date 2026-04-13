@@ -28,15 +28,19 @@ async fn test_moltbook_feed_scenario() {
 
     println!("--------------------------------------------------");
     println!("[TEST PHASE 2] LLM 파이프라인 (Planner) 도구 호출 시나리오 테스트");
-    let actual_prompt = app_lib::agent::prompts::build_single_agent_prompt(
-        "You are the PLANNER and RESEARCHER. Your job is to gather data using tools.", // system_prompt
-        "None", // skills
-        "2026-04-13T12:00:00Z", // current_time
-        "None", // schedules
-        "Korean", // lang_name
-        "한국어", // lang_native
-        "None" // brain
-    );
+    // 실제 프로덕션에서 사용되는 최신 프롬프트를 프론트엔드 코드(constants.ts)에서 직접 읽어와 테스트합니다.
+    let constants_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../src/lib/constants.ts");
+    let constants_content = std::fs::read_to_string(&constants_path).expect("Failed to read constants.ts");
+    let start_tag = "export const DEFAULT_PLANNER = `";
+    let start_idx = constants_content.find(start_tag).expect("Could not find DEFAULT_PLANNER") + start_tag.len();
+    let end_idx = constants_content[start_idx..].find("`;").expect("Could not find end of DEFAULT_PLANNER") + start_idx;
+    
+    // 치환자를 빈 문자열이나 기본값으로 정리하여 완전한 프롬프트로 만듭니다.
+    let actual_prompt = constants_content[start_idx..end_idx]
+        .replace("{SYSTEM_PROMPT}", "You are the PumAgent.")
+        .replace("{CURRENT_TIME}", "2026-04-13T12:00:00Z")
+        .replace("{BRAIN_FILES}", "")
+        .replace("{SKILLS_RULES}", "");
 
     // AI에게 시나리오 던지기
     let response = client.chat(&vec![
@@ -48,11 +52,17 @@ async fn test_moltbook_feed_scenario() {
     println!("로컬 LLM (Gemma) 응답 분석 중...");
     println!("Raw Reply:\n{}", text);
 
-    // AI가 몰트북 도구를 올바르게 사용하기 위해 JSON 블록을 출력했는지 검증
-    let contains_tool = text.contains("\"tool\": \"moltbook\"") || text.contains("\"tool\":\"moltbook\"");
-    let contains_action = text.contains("\"action\": \"feed\"") || text.contains("\"action\":\"feed\"");
+    // AI가 몰트북 도구를 올바르게 사용하기 위해 도구 호출을 생성했는지 검증
+    // 단순 문자열 매칭 대신, 실제 프로덕션에서 사용하는 parser를 사용하여 검증합니다.
+    let tool_calls = app_lib::agent::parser::extract_json_blocks(&text);
     
-    assert!(contains_tool && contains_action, "LLM이 도구 사용 지침(JSON format)을 준수하지 않았습니다!");
+    let has_moltbook_feed = tool_calls.iter().any(|call| {
+        let tool = call.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+        let action = call.get("action").and_then(|v| v.as_str()).unwrap_or("");
+        tool == "moltbook" && action == "feed"
+    });
+    
+    assert!(has_moltbook_feed, "LLM이 moltbook feed 도구를 호출하지 않았거나 파서가 인식할 수 없는 형식을 사용했습니다! Response: {}", text);
 
     println!("--------------------------------------------------");
     println!("[TEST PHASE 3] 플래너 도구 에러 발생 시 자가 디버깅(Recovery) 시나리오");
@@ -83,4 +93,30 @@ async fn test_moltbook_feed_scenario() {
 
     println!("--------------------------------------------------");
     println!("ALL SCENARIOS PASSED SUCCESSFULLY! 🚀");
+}
+
+#[tokio::test]
+async fn debug_vault_check() {
+    use keyring::Entry;
+    println!("--- Vault Diagnostic Start ---");
+    let entry = Entry::new("PumAgentVault", "moltbook_creds");
+    match entry {
+        Ok(e) => {
+            match e.get_password() {
+                Ok(pw) => {
+                    println!("SUCCESS: 'moltbook_creds' found in Vault.");
+                    println!("LENGTH: {} characters", pw.len());
+                    println!("PREVIEW: {}...", pw.chars().take(5).collect::<String>());
+                    if pw.trim().starts_with('{') {
+                        println!("FORMAT: Looks like JSON");
+                    } else {
+                        println!("FORMAT: Looks like RAW STRING");
+                    }
+                },
+                Err(err) => println!("ERROR: Could not retrieve password for 'moltbook_creds': {}", err),
+            }
+        },
+        Err(err) => println!("ERROR: Could not create keyring entry: {}", err),
+    }
+    println!("--- Vault Diagnostic End ---");
 }

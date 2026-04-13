@@ -244,3 +244,6 @@ impl Orchestrator {
 mod multi_agent;
 pub mod reflector;
 mod single_agent;
+pub mod planner;
+pub mod critic;
+pub mod writer;

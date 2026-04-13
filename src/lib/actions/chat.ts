@@ -147,15 +147,31 @@ export async function internalExecuteAgent() {
     };
 
     let results: any = await invoke("execute_agent_tools", { payload });
+    let final_text = results.final_output;
+    if (final_text && typeof final_text === "string" && final_text.startsWith("i18n:")) {
+      try {
+        let logData = JSON.parse(final_text.replace("i18n:", ""));
+        final_text = t(logData.key, logData.args);
+      } catch (e) {}
+    }
+    
     let lastIndex = appState.messages.length - 1;
     let lastMsg = appState.messages[lastIndex];
-    lastMsg.content = results.final_output;
+    lastMsg.content = final_text;
     appState.messages[lastIndex] = lastMsg;
   } catch (err: any) {
-    addLog(t("sys.bridge_err", { err }));
+    let errMsg = err;
+    if (typeof err === "string" && err.startsWith("i18n:")) {
+      try {
+        let logData = JSON.parse(err.replace("i18n:", ""));
+        errMsg = t(logData.key, logData.args);
+      } catch (e) {}
+    }
+    
+    addLog(t("sys.bridge_err", { err: errMsg }));
     let lastIndex = appState.messages.length - 1;
     let lastMsg = appState.messages[lastIndex];
-    lastMsg.content = t("sys.bridge_err_msg", { err });
+    lastMsg.content = t("sys.bridge_err_msg", { err: errMsg });
     appState.messages[lastIndex] = lastMsg;
   } finally {
     appState.isThinking = false;

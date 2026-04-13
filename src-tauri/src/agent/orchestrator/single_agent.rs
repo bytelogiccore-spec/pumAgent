@@ -74,9 +74,15 @@ impl super::Orchestrator {
         loop {
             if cancel_flag.load(Ordering::Relaxed) {
                 let _ = log_tx
-                    .send("[안내] 사용자에 의해 에이전트 실행이 중지되었습니다.".to_string())
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.agent_stopped_by_user", "args": {}})
+                    ))
                     .await;
-                return Ok(("[USER_STOPPED]".to_string(), history));
+                return Ok((
+                    format!("i18n:{}", serde_json::json!({"key": "chat.agent_stopped", "args": {}})),
+                    history,
+                ));
             }
 
             loop_count += 1;
@@ -149,14 +155,17 @@ impl super::Orchestrator {
             let response = match response_res {
                 Ok(res) => res,
                 Err(e) => {
-                    let err_msg = format!("Final LLM Failure: {}", e);
+                    let err_msg = e.to_string();
                     let _ = log_tx
                         .send(format!(
                             "i18n:{}",
                             serde_json::json!({"key": "log.llm_fatal", "args": {"err": err_msg}})
                         ))
                         .await;
-                    return Err(err_msg);
+                    return Err(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "chat.agent_llm_fatal", "args": {"err": err_msg}})
+                    ));
                 }
             };
 
@@ -192,7 +201,10 @@ impl super::Orchestrator {
             if tool_calls.is_empty() {
                 // Goal Achieved or Natural Chat
                 let _ = log_tx
-                    .send("[완료] 최종 라운드가 성공적으로 종료되었습니다.".to_string())
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.final_round_success", "args": {}})
+                    ))
                     .await;
                 self.save_transcript(session_id, &history);
                 return Ok((Self::sanitize_output(&ai_text), history));
@@ -213,9 +225,7 @@ impl super::Orchestrator {
             let mut result_summary_md = String::from("### Tool Execution Results\n");
             for r in results {
                 let status = if r.ok { "SUCCESS" } else { "FAIL" };
-                let _ = log_tx
-                    .send(format!(" -> [{}.{}] {}", r.tool_name, r.action, status))
-                    .await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name, "action": r.action, "status": status}}))).await;
 
                 if r.ok
                     && (r.action == "write" || r.action == "write_artifact")
@@ -259,6 +269,9 @@ impl super::Orchestrator {
         }
 
         self.save_transcript(session_id, &history);
-        Ok(("Agent Terminated without Conclusion.".to_string(), history))
+        Ok((
+            format!("i18n:{}", serde_json::json!({"key": "chat.agent_terminated", "args": {}})),
+            history,
+        ))
     }
 }

@@ -181,5 +181,8 @@
   "log.reflector_no_tools": "[Reflector] 실행 가능한 작업이 없습니다.",
   "log.reflector_executing": "[Reflector] {count}개의 작업을 백그라운드 처리합니다.",
   "log.reflector_db_saved": "[DB 저장 백그라운드] 💾 {tool}로 데이터가 정리되었습니다.",
-  "log.reflector_done": "[Reflector] 회고를 완료했습니다."
+  "log.reflector_done": "[Reflector] 회고를 완료했습니다.",
+  "chat.agent_stopped": "⛔ 사용자에 의해 실행이 중지되었습니다.",
+  "chat.agent_llm_fatal": "⚠️ AI 추론 실패: {err}",
+  "chat.agent_terminated": "⚠️ 목표를 달성하지 못하고 파이프라인이 종료되었습니다."
 }

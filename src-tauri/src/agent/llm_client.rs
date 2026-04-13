@@ -17,12 +17,15 @@ struct ChatPayload<'a> {
     model: &'a str,
     temperature: f32,
     messages: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug)]
 pub struct LLMResult {
     pub content: String,
     pub raw: Value,
+    pub native_tool_calls: Vec<Value>,
 }
 
 #[derive(Clone)]
@@ -31,6 +34,7 @@ pub struct LLMClient {
     base_url: String,
     model: String,
     api_key: String,
+    tools: Option<Vec<serde_json::Value>>,
 }
 
 impl LLMClient {
@@ -43,7 +47,13 @@ impl LLMClient {
             base_url,
             model,
             api_key,
+            tools: None,
         }
+    }
+
+    pub fn with_tools(mut self, tools: Vec<serde_json::Value>) -> Self {
+        self.tools = Some(tools);
+        self
     }
 
     pub async fn chat(
@@ -86,6 +96,7 @@ impl LLMClient {
             model: &self.model,
             temperature,
             messages: json_messages,
+            tools: self.tools.clone(),
         };
 
         let mut retries = 0;
@@ -154,9 +165,26 @@ impl LLMClient {
             }
         }
 
+        let mut native_tool_calls = vec![];
+        if let Some(tool_calls) = msg_obj.get("tool_calls").and_then(|t| t.as_array()) {
+            for call in tool_calls {
+                if let Some(func) = call.get("function") {
+                    let tool_name = func.get("name").and_then(|n| n.as_str()).unwrap_or_default();
+                    let args_str = func.get("arguments").and_then(|a| a.as_str()).unwrap_or("{}");
+                    if let Ok(mut parsed_args) = serde_json::from_str::<serde_json::Value>(args_str) {
+                        if let Some(obj) = parsed_args.as_object_mut() {
+                            obj.insert("tool".to_string(), serde_json::json!(tool_name));
+                            native_tool_calls.push(parsed_args);
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(LLMResult {
             content,
             raw: raw_json,
+            native_tool_calls,
         })
     }
 }
