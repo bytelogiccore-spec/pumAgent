@@ -71,6 +71,9 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
    - "knowledge": (action: "read"|"write"|"list"|"delete", args: {{"domain": "skills"|"rules"|"workflows"|"schedules", "name": "string", "content": "string"}}) -> Manage your own logic and rules by writing to the knowledge base! ANTI-SPLINTERING: Always read and overwrite existing items instead of creating _v2.
      *CRITICAL: If the user asks to schedule a periodic repeating task (e.g. "every 5 minutes"), YOU MUST set `domain="schedules"`. DO NOT use `workflows` for periodic tasks.*
      *CRITICAL: If domain='schedules', `content` MUST be a JSON string EXACTLY matching this schema: `{{\"name\": \"str\", \"interval_seconds\": num (optional), \"cron_expression\": \"str (optional)\", \"description\": \"str\", \"task_prompt\": \"Exact prompt to execute\", \"end_date\": \"ISO8601 string or null\"}}`*
+   - "http": (action: "request", args: {{"method": "GET"|"POST"|"PUT"|"DELETE", "url": "string", "headers": {{"key": "value"}}, "body": "string"}}) -> Execute a native HTTP API request. Use this instead of curl scripts! No OS dependency.
+   - "scripting": (action: "run_rhai", args: {{"script": "string"}}) -> Execute a Rhai embedded Rust script dynamically! The Rhai script can use native bound functions like `http_get("url")`, `http_post("url", "{{\\\"Authorization\\\":\\\"abc\\\"}}", "body")` and `print("msg")`. Very powerful for looping, scraping APIs, and writing zero-dependency dynamic plugins. You MUST write correct Rhai script strings.
+   - "telegram": (action: "send_message", args: {{"message": "string"}}) -> Send a proactive push notification to the user's mobile Telegram. Use this immediately if you discover pending tasks or important alerts during a heartbeat/background loop.
 
 [REGISTERED SCHEDULES]
 {schedules}

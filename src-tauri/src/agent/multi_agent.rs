@@ -9,6 +9,8 @@ use crate::tools::search::SearchTool;
 use crate::tools::knowledge::KnowledgeTool;
 use crate::tools::telegram_tool::TelegramTool;
 use crate::tools::terminal::TerminalTool;
+use crate::tools::http_tool::HttpTool;
+use crate::tools::scripting_tool::ScriptingTool;
 
 pub struct MultiAgent {
     crawler: Arc<Crawler>,
@@ -17,6 +19,8 @@ pub struct MultiAgent {
     terminal_tool: Arc<TerminalTool>,
     knowledge_tool: Arc<KnowledgeTool>,
     telegram_tool: Arc<TelegramTool>,
+    http_tool: Arc<HttpTool>,
+    script_tool: Arc<ScriptingTool>,
 }
 
 pub struct ToolResult {
@@ -34,6 +38,8 @@ impl MultiAgent {
         terminal_tool: TerminalTool,
         knowledge_tool: KnowledgeTool,
         telegram_tool: TelegramTool,
+        http_tool: HttpTool,
+        script_tool: ScriptingTool,
     ) -> Self {
         MultiAgent {
             crawler: Arc::new(crawler),
@@ -42,6 +48,8 @@ impl MultiAgent {
             terminal_tool: Arc::new(terminal_tool),
             knowledge_tool: Arc::new(knowledge_tool),
             telegram_tool: Arc::new(telegram_tool),
+            http_tool: Arc::new(http_tool),
+            script_tool: Arc::new(script_tool),
         }
     }
 
@@ -87,6 +95,8 @@ impl MultiAgent {
             let terminal_tool = Arc::clone(&self.terminal_tool);
             let knowledge_tool = Arc::clone(&self.knowledge_tool);
             let telegram_tool = Arc::clone(&self.telegram_tool);
+            let http_tool = Arc::clone(&self.http_tool);
+            let script_tool = Arc::clone(&self.script_tool);
 
             let llm_clone = llm.clone();
             let registry_prompt_clone = registry_prompt.clone();
@@ -103,6 +113,8 @@ impl MultiAgent {
                     }
                     "terminal" => terminal_tool.execute_action(tool, action, args),
                     "telegram" => telegram_tool.execute_action(tool, action, args).await,
+                    "http" => http_tool.execute_action(tool, action, args).await,
+                    "scripting" => script_tool.execute_action(tool, action, args).await,
                     _ => ToolResult {
                         tool_name: tool,
                         action,
@@ -143,6 +155,8 @@ mod tests {
         let terminal_tool = TerminalTool::new(std::path::PathBuf::from("."));
         let knowledge_tool = KnowledgeTool::new(std::path::PathBuf::from("."));
         let telegram_tool = TelegramTool::new(std::path::PathBuf::from("."));
+        let http_tool = crate::tools::http_tool::HttpTool::new();
+        let script_tool = crate::tools::scripting_tool::ScriptingTool::new();
 
         let agent = MultiAgent::new(
             crawler,
@@ -151,6 +165,8 @@ mod tests {
             terminal_tool,
             knowledge_tool,
             telegram_tool,
+            http_tool,
+            script_tool,
         );
         let request = json!({
             "tool": "crawl4ai",

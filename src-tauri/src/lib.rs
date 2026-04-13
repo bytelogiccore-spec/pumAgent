@@ -129,6 +129,8 @@ pub fn run() {
             let terminal_tool = TerminalTool::new(base_dir.clone());
             let knowledge_tool = KnowledgeTool::new(db.clone());
             let telegram_tool = TelegramTool::new(base_dir.clone());
+            let http_tool = crate::tools::http_tool::HttpTool::new();
+            let script_tool = crate::tools::scripting_tool::ScriptingTool::new();
 
             let state = AgentState {
                 multi_agent: Arc::new(MultiAgent::new(
@@ -138,6 +140,8 @@ pub fn run() {
                     terminal_tool,
                     knowledge_tool,
                     telegram_tool,
+                    http_tool,
+                    script_tool,
                 )),
                 base_dir: base_dir.clone(),
                 cancel_flag: Arc::new(AtomicBool::new(false)),
