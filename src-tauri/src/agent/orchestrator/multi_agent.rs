@@ -25,37 +25,14 @@ impl super::Orchestrator {
         let (current_time, brain_files_md, schedule_files_md, mut pending_tasks, skills_rules) =
             self.build_context();
 
-        let (lang_name, _lang_native) = match language {
-            "en" => ("ENGLISH".to_string(), "English".to_string()),
-            "ko" => ("KOREAN".to_string(), "한국어".to_string()),
-            _ => (language.to_uppercase(), language.to_string()),
-        };
+        let lang_display = self.get_lang_display(language);
 
-        let fallback_planner_prompt = format!(
-            r#"[PLANNER SYSTEM PROMPT]
-{sys}
-
-{skills}
-
-[SYSTEM TIME ANCHOR]
-Current System Time: {current_time} (You live in this exact present moment. Use this to accurately calculate "recent", "upcoming", "past", and assess dates from search results).
-
-[CRITICAL TOOL INSTRUCTIONS & WORKFLOW RULES]
-1. You are the PLANNER and RESEARCHER. Your job is to gather data using tools.
-2. If you do not need tools (e.g., simple greetings, casual chat), simply reply naturally to the user and DO NOT output "DONE".
-3. If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE".
-
-[LONG TERM MEMORY (BRAIN)]
-{brain}
-
-[REGISTERED SCHEDULES]
-{schedules}
-"#,
-            sys = system_prompt,
-            skills = skills_rules,
-            current_time = current_time,
-            brain = brain_files_md,
-            schedules = schedule_files_md
+        let fallback_planner_prompt = crate::agent::prompts::build_planner_prompt(
+            system_prompt,
+            &skills_rules,
+            &current_time,
+            &schedule_files_md,
+            &brain_files_md,
         );
 
         let base_planner = planner_prompt_opt.unwrap_or(&fallback_planner_prompt);
@@ -175,7 +152,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 // Run Writer Agent
                 let (writer_res, _) = self.run_writer_phase(
                     writer_prompt_opt,
-                    &lang_name,
+                    &lang_display,
                     history.clone(),
                     &mut active_writer_id,
                     &log_tx,
@@ -251,7 +228,7 @@ Current System Time: {current_time} (You live in this exact present moment. Use 
                 // Run Writer Phase
                 let (writer_res, _) = self.run_writer_phase(
                     writer_prompt_opt,
-                    &lang_name,
+                    &lang_display,
                     history.clone(),
                     &mut active_writer_id,
                     &log_tx,

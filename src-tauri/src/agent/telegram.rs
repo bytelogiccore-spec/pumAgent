@@ -32,15 +32,15 @@ pub async fn start_telegram_bot(
     match bot.get_me().await {
         Ok(me) => {
             let msg = format!(
-                "[System] Telegram Bot integration successful! (@{}) - Waiting for messages...",
-                me.user.username.unwrap_or_default()
+                "i18n:{}",
+                serde_json::json!({"key": "log.sys_telegram_success", "args": {"username": me.user.username.unwrap_or_default()}})
             );
             let _ = app_handle.emit("tool_log", msg);
         }
         Err(e) => {
             let msg = format!(
-                "[System Error] Telegram Bot integration failed (Check Token): {}",
-                e
+                "i18n:{}",
+                serde_json::json!({"key": "log.sys_telegram_failed", "args": {"err": e.to_string()}})
             );
             let _ = app_handle.emit("tool_log", msg);
             return; // Stop if invalid token
@@ -84,7 +84,7 @@ pub async fn start_telegram_bot(
                     }
                     let _ = app_handle.emit(
                         "tool_log",
-                        "[System] Telegram Chat ID linked successfully. (Push notifications enabled)".to_string(),
+                        format!("i18n:{}", serde_json::json!({"key": "log.sys_telegram_linked", "args": {}})),
                     );
                 }
 

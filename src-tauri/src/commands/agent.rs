@@ -254,7 +254,7 @@ pub async fn execute_background_scheduler(
             if msg.starts_with("i18n:") {
                 let _ = app_clone.emit("tool_log", msg);
             } else {
-                let _ = app_clone.emit("tool_log", format!("[백그라운드] {}", msg));
+                let _ = app_clone.emit("tool_log", format!("i18n:{}", serde_json::json!({"key": "log.sys_background", "args": {"msg": msg}})));
             }
         }
     });

@@ -41,11 +41,7 @@ impl super::Orchestrator {
                 .await;
         }
 
-        let (lang_name, lang_native) = match language {
-            "en" => ("ENGLISH".to_string(), "English".to_string()),
-            "ko" => ("KOREAN".to_string(), "Korean".to_string()),
-            _ => (language.to_uppercase(), language.to_string()),
-        };
+        let lang_display = self.get_lang_display(language);
 
         let (current_time, brain_files_md, schedule_files_md, mut pending_tasks, skills_rules) =
             self.build_context();
@@ -55,8 +51,7 @@ impl super::Orchestrator {
             &skills_rules,
             &current_time,
             &schedule_files_md,
-            &lang_name,
-            &lang_native,
+            &lang_display,
             &brain_files_md,
         );
 
@@ -128,8 +123,11 @@ impl super::Orchestrator {
                 ))
                 .await;
 
+            let tools_schema = self.multi_agent.get_tool_schemas();
+
             let mut response_res = self
                 .get_llm_client_by_id(&active_worker_id)
+                .with_tools(tools_schema.clone())
                 .chat(&history, 0.7)
                 .await;
             if response_res.is_err() {
@@ -142,6 +140,7 @@ impl super::Orchestrator {
                         fallback_ep.model.clone(),
                         fallback_ep.api_key.clone(),
                     )
+                    .with_tools(tools_schema.clone())
                     .chat(&history, 0.7)
                     .await;
                     if response_res.is_ok() {

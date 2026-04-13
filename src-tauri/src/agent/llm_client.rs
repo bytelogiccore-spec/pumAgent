@@ -125,11 +125,15 @@ impl LLMClient {
             } else if response.status().as_u16() == 429 || response.status().is_server_error() {
                 if retries >= max_retries {
                     return Err(format!(
-                        "HTTP 오류 ({}회 재시도 초과): {}",
-                        max_retries,
-                        response.status()
-                    )
-                    .into());
+                        "i18n:{}",
+                        serde_json::json!({
+                            "key": "err.http_max_retries",
+                            "args": {
+                                "max_retries": max_retries,
+                                "status": response.status().as_u16()
+                            }
+                        })
+                    ).into());
                 }
                 retries += 1;
                 log::warn!(
@@ -146,10 +150,25 @@ impl LLMClient {
                 let text = response.text().await.unwrap_or_default();
 
                 if text.contains("image input is not supported") || text.contains("mmproj") {
-                    return Err("오류: 현재 연결된 LLM 모델이 이미지(Vision) 분석을 지원하지 않거나, 멀티모달(mmproj) 프로젝터가 로드되지 않았습니다. 사진 첨부를 해제하거나 비전 지원 모델을 사용해주세요.".into());
+                    return Err(format!(
+                        "i18n:{}",
+                        serde_json::json!({
+                            "key": "err.vision_not_supported",
+                            "args": {}
+                        })
+                    ).into());
                 }
 
-                return Err(format!("HTTP 오류: {} - {}", status, text).into());
+                return Err(format!(
+                    "i18n:{}",
+                    serde_json::json!({
+                        "key": "err.http_error",
+                        "args": {
+                            "status": status.as_u16(),
+                            "text": text
+                        }
+                    })
+                ).into());
             }
         };
 

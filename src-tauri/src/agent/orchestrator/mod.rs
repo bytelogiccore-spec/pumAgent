@@ -94,6 +94,22 @@ impl Orchestrator {
         fallbacks
     }
 
+    pub fn get_lang_display(&self, language: &str) -> String {
+        let key = format!("locales:{}.json", language);
+        if let Ok(Some(bytes)) = self.db.get("knowledge_base", key.as_bytes()) {
+            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if let Some(display) = json.get("settings.lang_custom_display").and_then(|v| v.as_str()) {
+                    return display.to_string();
+                }
+            }
+        }
+        match language {
+            "en" => "English(Native)".to_string(),
+            "ko" => "Korean(한국어)".to_string(),
+            _ => language.to_string(),
+        }
+    }
+
     /// Extracts duplicated environment context building (time, brain artifacts, schedules)
     fn build_context(
         &self,

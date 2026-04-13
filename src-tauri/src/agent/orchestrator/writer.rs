@@ -5,21 +5,21 @@ impl super::Orchestrator {
     pub async fn run_writer_phase(
         &self,
         writer_prompt_opt: Option<&str>,
-        lang_name: &str,
+        lang_display: &str,
         mut history: Vec<ChatMessage>,
         active_writer_id: &mut String,
         log_tx: &mpsc::Sender<String>,
         is_tool_done: bool,
     ) -> Result<(LLMResult, Vec<ChatMessage>), String> {
         let writer_prompt = if is_tool_done {
-            let fallback_writer_prompt = crate::agent::prompts::get_fallback_writer_prompt(lang_name);
+            let fallback_writer_prompt = crate::agent::prompts::get_fallback_writer_prompt(lang_display);
             let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt);
             let writer_prompt_msg = ChatMessage {
                 role: "system".to_string(),
                 content: writer_system.to_string(),
                 images_base64: None,
             };
-            let writer_directive = crate::agent::prompts::get_writer_final_directive(lang_name);
+            let writer_directive = crate::agent::prompts::get_writer_final_directive(lang_display);
             history.push(ChatMessage {
                 role: "user".to_string(),
                 content: writer_directive,
@@ -27,14 +27,14 @@ impl super::Orchestrator {
             });
             writer_prompt_msg
         } else {
-            let fallback_writer_prompt = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}.", lang_name);
+            let fallback_writer_prompt = format!("You are a WRITER Agent. Synthesize the findings and user conversations into a highly professional response entirely in natural {}.", lang_display);
             let writer_system = writer_prompt_opt.unwrap_or(&fallback_writer_prompt);
             let writer_prompt_msg = ChatMessage {
                 role: "system".to_string(),
                 content: writer_system.to_string(),
                 images_base64: None,
             };
-            history.push(ChatMessage { role: "user".to_string(), content: format!("The user's request has been fulfilled or the data is ready. Please provide the final response to the user in {}. DO NOT unnecessarily repeat conversational history. Focus ONLY on what was just done or discovered.", lang_name), images_base64: None });
+            history.push(ChatMessage { role: "user".to_string(), content: format!("The user's request has been fulfilled or the data is ready. Please provide the final response to the user in {}. DO NOT unnecessarily repeat conversational history. Focus ONLY on what was just done or discovered.", lang_display), images_base64: None });
             writer_prompt_msg
         };
 
