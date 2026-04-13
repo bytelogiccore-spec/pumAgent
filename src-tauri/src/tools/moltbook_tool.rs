@@ -1,7 +1,6 @@
 use crate::agent::multi_agent::ToolResult;
 use rquest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 

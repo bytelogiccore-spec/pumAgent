@@ -1,7 +1,6 @@
 use rhai::{Engine, Scope, Dynamic, EvalAltResult};
 use crate::agent::multi_agent::ToolResult;
 use std::collections::HashMap;
-use std::sync::Arc;
 use crate::tools::http_tool::HttpTool;
 
 pub struct ScriptingTool {}

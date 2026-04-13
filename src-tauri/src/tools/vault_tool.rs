@@ -72,7 +72,7 @@ impl VaultTool {
         args: serde_json::Value,
     ) -> ToolResult {
         let ok;
-        let mut output = String::new();
+        let output;
 
         match action.as_str() {
             "request" => {
