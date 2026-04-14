@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 use crate::agent::llm_client::ChatMessage;
 use crate::agent::multi_agent::MultiAgent;
 use crate::agent::orchestrator::Orchestrator;
+use crate::tools::telegram_tool::TelegramTool;
 use crate::AppConfig;
 
 type TelegramState = Arc<(
@@ -80,6 +81,16 @@ pub async fn start_telegram_bot(
                     }
                 }
 
+                let history_key = format!("telegram_history:{}", msg.chat.id);
+
+                if text == "/reset" {
+                    let _ = db.delete("config", history_key.as_bytes());
+                    let _ = bot
+                        .send_message(msg.chat.id, "🔄 Conversation history has been reset.")
+                        .await;
+                    return respond(());
+                }
+
                 let incoming_chat_id = msg.chat.id.to_string();
                 if config.telegram_chat_id != incoming_chat_id {
                     log::info!("Updating telegram_chat_id to {}", incoming_chat_id);
@@ -117,20 +128,42 @@ pub async fn start_telegram_bot(
                     db.clone(),
                 );
 
-                let user_msgs = vec![ChatMessage {
+                // Load session history from DB
+                let mut session_history = match db.get("config", history_key.as_bytes()) {
+                    Ok(Some(bytes)) => {
+                        serde_json::from_slice::<Vec<ChatMessage>>(&bytes).unwrap_or_default()
+                    }
+                    _ => Vec::new(),
+                };
+
+                // Filter out system messages from persisted history to avoid duplication
+                session_history.retain(|m| m.role != "system");
+
+                session_history.push(ChatMessage {
                     role: "user".to_string(),
                     content: text.to_string(),
                     images_base64: None,
-                }];
+                });
 
                 // Channel for capturing internal logs and broadcasting them to Tauri GUI
                 let (log_tx, mut log_rx) = mpsc::channel::<String>(100);
                 let app_handle_clone = app_handle.clone();
+                let bot_clone = bot.clone();
+                let chat_id_clone = msg.chat.id;
+                let lang_clone = config.language.clone();
+                let db_clone = db.clone();
 
                 tokio::spawn(async move {
                     while let Some(log_msg) = log_rx.recv().await {
                         // Broadcast log to desktop GUI
                         let _ = app_handle_clone.emit("tool_log", log_msg.clone());
+
+                        // Also forward translated log to Telegram for "Call Info" reporting
+                        let resolved = Orchestrator::resolve_i18n(&log_msg, &lang_clone, &db_clone);
+                        let (clean_log, _) = TelegramTool::clean_message_text(&resolved);
+                        let _ = bot_clone
+                            .send_message(chat_id_clone, format!("📋 {}", clean_log))
+                            .await;
                     }
                 });
 
@@ -144,7 +177,7 @@ pub async fn start_telegram_bot(
                         config.planner_prompt.as_deref(),
                         config.critic_prompt.as_deref(),
                         config.writer_prompt.as_deref(),
-                        user_msgs,
+                        session_history,
                         &config.language,
                         config.max_loops,
                         config.use_multi_agent_workflow,
@@ -155,8 +188,22 @@ pub async fn start_telegram_bot(
                     .await;
 
                 match res {
-                    Ok((final_output, _history)) => {
-                        let _ = bot.send_message(msg.chat.id, final_output).await;
+                    Ok((final_output, history)) => {
+                        // Persist the updated history (limiting to last 20 messages for context)
+                        let mut updated_history = history;
+                        if updated_history.len() > 20 {
+                            let start = updated_history.len() - 20;
+                            updated_history = updated_history[start..].to_vec();
+                        }
+                        if let Ok(serialized) = serde_json::to_vec(&updated_history) {
+                            let _ = db.insert("config", history_key.as_bytes(), &serialized);
+                            let _ = db.flush();
+                        }
+
+                        // Aggressively clean final output to strip thinking blocks and mermaid diagrams
+                        let (clean_text, _diagrams) =
+                            TelegramTool::clean_message_text(&final_output);
+                        let _ = bot.send_message(msg.chat.id, clean_text).await;
                     }
                     Err(e) => {
                         let _ = bot

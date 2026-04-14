@@ -46,6 +46,24 @@ impl super::Orchestrator {
         let (current_time, brain_files_md, schedule_files_md, mut pending_tasks, skills_rules) =
             self.build_context();
 
+        // Fast Exit for Autonomous Heartbeat: If no tasks are pending and this is a background run,
+        // exit immediately without calling the LLM to save tokens and time.
+        if is_background_run && pending_tasks.is_empty() {
+            let _ = log_tx
+                .send(format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "log.heartbeat_idle_skipping", "args": {}})
+                ))
+                .await;
+            return Ok((
+                format!(
+                    "i18n:{}",
+                    serde_json::json!({"key": "chat.heartbeat_idle", "args": {}})
+                ),
+                Vec::new(),
+            ));
+        }
+
         let force_tool_prompt = crate::agent::prompts::build_single_agent_prompt(
             system_prompt,
             &skills_rules,

@@ -11,6 +11,24 @@ impl TelegramTool {
         TelegramTool { base_dir }
     }
 
+    pub fn clean_message_text(message: &str) -> (String, Vec<String>) {
+        // Aggressively strip thinking/reasoning blocks using the common parser utility
+        let text = crate::agent::parser::strip_thinking_blocks(message);
+
+        let re = regex::Regex::new(r"```mermaid(?:\r?\n)([\s\S]*?)```").unwrap();
+        let mut diagrams = Vec::new();
+        for cap in re.captures_iter(&text) {
+            if let Some(code) = cap.get(1) {
+                diagrams.push(code.as_str().to_string());
+            }
+        }
+        let clean_text = re
+            .replace_all(&text, "🎨 [Mermaid Diagram Attached]")
+            .to_string();
+
+        (clean_text.trim().to_string(), diagrams)
+    }
+
     pub async fn send_message(&self, message: &str) -> String {
         // We load the config fresh every time to ensure we have the latest token and chat_id
         let config = AppConfig::load(&self.base_dir);
@@ -31,22 +49,36 @@ impl TelegramTool {
         let bot = Bot::new(config.telegram_bot_token.clone());
         let chat_id = ChatId(config.telegram_chat_id.parse::<i64>().unwrap_or_default());
 
-        let think_re = regex::Regex::new(r"(?i)<think>[\s\S]*?</think>").unwrap();
-        let clean_text_no_think = think_re.replace_all(message, "").to_string();
+        println!("[TelegramTool] --- SENDING MESSAGE ---");
+        println!("[TelegramTool] Raw message length: {}", message.len());
 
-        let re = regex::Regex::new(r"```mermaid(?:\r?\n)([\s\S]*?)```").unwrap();
-        let mut diagrams = Vec::new();
-        for cap in re.captures_iter(&clean_text_no_think) {
-            if let Some(code) = cap.get(1) {
-                diagrams.push(code.as_str().to_string());
-            }
+        // DEBUG: Write raw message to file for inspection
+        let debug_file = self.base_dir.join("debug_telegram_raw.txt");
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&debug_file)
+        {
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let _ = std::io::Write::write_all(
+                &mut file,
+                format!("\n--- [{}] RAW MESSAGE ---\n{}\n---------------------------\n", timestamp, message)
+                    .as_bytes(),
+            );
         }
-        let clean_text = re
-            .replace_all(&clean_text_no_think, "🎨 [Mermaid Diagram Attached]")
-            .to_string();
 
-        // Final cleanup of extra whitespace/newlines
-        let clean_text = clean_text.trim().to_string();
+        let (clean_text, diagrams) = Self::clean_message_text(message);
+
+        // VALIDATION: Check if think tags still exist
+        let lower_clean = clean_text.to_lowercase();
+        if lower_clean.contains("<think") || lower_clean.contains("<thought") || lower_clean.contains("<reasoning") {
+            eprintln!("\n[TelegramTool] [CRITICAL WARNING] Think tags detected in CLEANED message!");
+            eprintln!("[TelegramTool] Content: \"{}\"\n", clean_text);
+        }
+
+        println!("[TelegramTool] Cleaned message length: {}", clean_text.len());
+        let preview: String = clean_text.chars().take(100).collect();
+        println!("[TelegramTool] Final payload preview: \"{}...\"", preview.replace("\n", " "));
 
         let mut final_status = "Telegram message sent successfully.".to_string();
 
@@ -115,5 +147,33 @@ impl TelegramTool {
                 output: format!("Unknown telegram action: {}", action),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clean_message_text() {
+        // Case 1: Simple message
+        let (clean, _) = TelegramTool::clean_message_text("안녕");
+        assert_eq!(clean, "안녕");
+
+        // Case 2: Message with think tags
+        let (clean, _) = TelegramTool::clean_message_text("<think>비밀생각</think>안녕");
+        assert_eq!(clean, "안녕");
+
+        // Case 3: Message with unclosed think tags
+        let (clean, _) = TelegramTool::clean_message_text("<think>끝까지 생각중... 안녕");
+        assert_eq!(clean, "");
+
+        // Case 4: Message with multiple tags
+        let (clean, _) = TelegramTool::clean_message_text("<think>생각1</think>중간<thought>생각2</thought>끝");
+        assert_eq!(clean, "중간끝");
+
+        // Case 5: Case insensitive and whitespace in tags
+        let (clean, _) = TelegramTool::clean_message_text("<THINK style=\"hidden\">대문자</THINK>안녕");
+        assert_eq!(clean, "안녕");
     }
 }

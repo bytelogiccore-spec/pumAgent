@@ -14,15 +14,26 @@ impl KnowledgeTool {
         if !["skills", "rules", "workflows", "schedules", "locales"].contains(&domain) {
             return Err("Invalid domain. Must be 'skills', 'rules', 'workflows', 'schedules', or 'locales'.".to_string());
         }
+
+        let trimmed_name = name.trim();
+        let final_name = if trimmed_name.is_empty() {
+            format!(
+                "Untitled_{}",
+                chrono::Local::now().format("%y%m%d_%H%M%S")
+            )
+        } else {
+            trimmed_name.to_string()
+        };
+
         let ext_name =
-            if !name.ends_with(".md") && !name.ends_with(".json") && !name.ends_with(".txt") {
+            if !final_name.ends_with(".md") && !final_name.ends_with(".json") && !final_name.ends_with(".txt") {
                 if domain == "schedules" {
-                    format!("{}.json", name)
+                    format!("{}.json", final_name)
                 } else {
-                    format!("{}.md", name)
+                    format!("{}.md", final_name)
                 }
             } else {
-                name.to_string()
+                final_name
             };
         Ok(format!("{}:{}", domain, ext_name))
     }

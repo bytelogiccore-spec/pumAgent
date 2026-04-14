@@ -113,6 +113,56 @@ impl Orchestrator {
         }
     }
 
+    pub fn resolve_i18n(log_msg: &str, language: &str, db: &Database) -> String {
+        if !log_msg.starts_with("i18n:") {
+            return log_msg.to_string();
+        }
+        let json_str = &log_msg[5..];
+        let val: serde_json::Value = match serde_json::from_str(json_str) {
+            Ok(v) => v,
+            Err(_) => return log_msg.to_string(),
+        };
+
+        let key = val.get("key").and_then(|k| k.as_str()).unwrap_or("");
+        let args = val.get("args").and_then(|a| a.as_object());
+
+        let locale_key = format!("locales:{}.json", language);
+        let mut resolved = key.to_string();
+
+        if let Ok(Some(bytes)) = db.get("knowledge_base", locale_key.as_bytes()) {
+            if let Ok(locale_json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                // Handle nested keys like "log.planner_planning"
+                let mut current = &locale_json;
+                let mut found = true;
+                for part in key.split('.') {
+                    if let Some(next) = current.get(part) {
+                        current = next;
+                    } else {
+                        found = false;
+                        break;
+                    }
+                }
+
+                if found {
+                    if let Some(template) = current.as_str() {
+                        resolved = template.to_string();
+                        if let Some(args_map) = args {
+                            for (k, v) in args_map {
+                                let placeholder = format!("{{{}}}", k);
+                                let val_str = match v {
+                                    serde_json::Value::String(s) => s.clone(),
+                                    _ => v.to_string(),
+                                };
+                                resolved = resolved.replace(&placeholder, &val_str);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        resolved
+    }
+
     /// Extracts duplicated environment context building (time, brain artifacts, schedules)
     fn build_context(
         &self,
@@ -200,6 +250,8 @@ impl Orchestrator {
     }
 
     pub fn sanitize_output(text: &str) -> String {
+        // 1. Aggressively strip thinking/thought blocks first
+        let text = crate::agent::parser::strip_thinking_blocks(text);
         let mut clean = text.to_string();
 
         // 2. Strip Gemma specific chain-of-thought tokens (only tool processing remnants)
@@ -230,6 +282,7 @@ impl Orchestrator {
         if let Some(pos) = clean.find("*(Self-Correction Check") {
             clean = clean[..pos].to_string();
         }
+        
         clean.trim().to_string()
     }
 
@@ -255,16 +308,8 @@ impl Orchestrator {
         for msg in history {
             out.push_str(&format!("### Role: {}\n", msg.role.to_uppercase()));
 
-            // Strip out <think> blocks for a cleaner markdown log
-            let mut clean_content = msg.content.clone();
-            while let Some(start) = clean_content.find("<think>") {
-                if let Some(end) = clean_content.find("</think>") {
-                    let full_block = &clean_content[start..end + "</think>".len()];
-                    clean_content = clean_content.replace(full_block, "");
-                } else {
-                    break;
-                }
-            }
+            // Strip out <think> blocks for a cleaner markdown log using the robust parser
+            let clean_content = crate::agent::parser::strip_thinking_blocks(&msg.content);
             out.push_str(&format!("{}\n\n---\n", clean_content.trim()));
         }
 
@@ -278,6 +323,25 @@ impl Orchestrator {
         {
             let _ = file.write_all(out.as_bytes());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_output_with_think() {
+        let input = "<think>Secret thoughts</think>Final Answer";
+        let output = Orchestrator::sanitize_output(input);
+        assert_eq!(output, "Final Answer");
+    }
+
+    #[test]
+    fn test_sanitize_output_complex() {
+        let input = "<thought>Thinking...</thought>Hello World <|tool_call|>json{}<tool_call|>";
+        let output = Orchestrator::sanitize_output(input);
+        assert_eq!(output, "Hello World");
     }
 }
 

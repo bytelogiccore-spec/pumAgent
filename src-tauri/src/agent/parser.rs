@@ -147,6 +147,23 @@ pub fn extract_json_blocks(markdown: &str) -> Vec<Value> {
     results
 }
 
+/// Aggressively strips thinking, thought, or reasoning blocks from a text string.
+/// This is used to clean outputs for both the UI and notification tools.
+pub fn strip_thinking_blocks(text: &str) -> String {
+    // Aggressive pattern to catch variants like <think>, <think >, <think style="...">, <thinking>, etc.
+    // We break it into a few broad patterns to ensure reliability.
+    let patterns = vec![
+        r"(?is)<[^>]*?(think|thought|thinking|thought_process|reasoning|details)\b[^>]*?>.*?(?:</[^>]*?(think|thought|thinking|thought_process|reasoning|details)\b[^>]*?>|$)",
+    ];
+    let mut clean_text = text.to_string();
+    for p in patterns {
+        if let Ok(re) = regex::Regex::new(p) {
+            clean_text = re.replace_all(&clean_text, "").to_string();
+        }
+    }
+    clean_text.trim().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,5 +189,24 @@ mod tests {
         assert_eq!(blocks.len(), 1);
         let action = blocks[0].get("action").unwrap().as_str().unwrap();
         assert_eq!(action, "list");
+    }
+
+    #[test]
+    fn test_strip_thinking_blocks() {
+        // Multi-tag cleaning
+        let input = "<think>A</think><thinking>B</thinking><details>C</details>Hello";
+        assert_eq!(strip_thinking_blocks(input), "Hello");
+
+        // Case insensitivity
+        let input = "<THINK>Hidden</THINK>Visible";
+        assert_eq!(strip_thinking_blocks(input), "Visible");
+
+        // Unclosed tag at end
+        let input = "Start <thought_process>Rest is hidden";
+        assert_eq!(strip_thinking_blocks(input), "Start");
+
+        // Reasoning tag
+        let input = "<reasoning>\nStep 1...\n</reasoning>Done";
+        assert_eq!(strip_thinking_blocks(input), "Done");
     }
 }
