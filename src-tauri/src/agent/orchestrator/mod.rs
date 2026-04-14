@@ -238,7 +238,14 @@ impl Orchestrator {
             modules_str.push_str("- No custom skills or workflows learned yet.\n");
         }
 
-        let combined_rules_modules = format!("{}{}", rules_str, modules_str);
+        let mut rules_combined = format!("{}{}", rules_str, modules_str);
+        
+        // Add follow-up suggestion instruction
+        rules_combined.push_str("\n[FOLLOW-UP SUGGESTIONS]\n");
+        rules_combined.push_str(crate::agent::prompts::get_suggestion_instruction());
+        rules_combined.push_str("\n");
+
+        let combined_rules_modules = rules_combined;
 
         (
             current_time,

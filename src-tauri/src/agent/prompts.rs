@@ -98,7 +98,14 @@ pub fn get_fallback_writer_prompt(lang_display: &str) -> String {
 
 pub fn get_writer_final_directive(lang_display: &str) -> String {
     format!(
-        "WRITER Agent, please write the final response based on the above tool exploration log (if any) and the conversation history. If it is a simple conversation without tools, just answer naturally in {}.",
+        "WRITER Agent, please write the final response based on the above tool exploration log (if any) and the conversation history. If it is a simple conversation without tools, just answer naturally in {}. \
+        At the end of your response, you MUST suggest 2-3 brief follow-up actions the user might want based on the context. \
+        Format each suggestion on its own line exactly like this: [SUGGESTION: Action Text]",
         lang_display
     )
+}
+
+pub fn get_suggestion_instruction() -> &'static str {
+    "At the end of your final response, you MUST suggest 2-3 very brief follow-up actions the user might take. \
+    Format each suggestion exactly like this on a new line: [SUGGESTION: Action Text]"
 }

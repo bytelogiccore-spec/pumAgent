@@ -1,6 +1,7 @@
 use crate::AppConfig;
 use std::path::PathBuf;
 use teloxide::prelude::*;
+use teloxide::types::InlineKeyboardMarkup;
 
 pub struct TelegramTool {
     base_dir: PathBuf,
@@ -29,7 +30,11 @@ impl TelegramTool {
         (clean_text.trim().to_string(), diagrams)
     }
 
-    pub async fn send_message(&self, message: &str) -> String {
+    pub async fn send_message(
+        &self,
+        message: &str,
+        reply_markup: Option<InlineKeyboardMarkup>,
+    ) -> String {
         // We load the config fresh every time to ensure we have the latest token and chat_id
         let config = AppConfig::load(&self.base_dir);
 
@@ -82,7 +87,12 @@ impl TelegramTool {
 
         let mut final_status = "Telegram message sent successfully.".to_string();
 
-        match bot.send_message(chat_id, &clean_text).await {
+        let mut send_req = bot.send_message(chat_id, &clean_text);
+        if let Some(markup) = reply_markup {
+            send_req = send_req.reply_markup(markup);
+        }
+
+        match send_req.await {
             Ok(_) => {}
             Err(e) => {
                 final_status = format!("Failed to send Telegram message: {}", e);
@@ -132,7 +142,7 @@ impl TelegramTool {
     ) -> crate::agent::multi_agent::ToolResult {
         if action == "send_message" {
             let message = args.get("message").and_then(|m| m.as_str()).unwrap_or("");
-            let result = self.send_message(message).await;
+            let result = self.send_message(message, None).await;
             crate::agent::multi_agent::ToolResult {
                 tool_name: tool,
                 action,

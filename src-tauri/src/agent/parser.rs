@@ -164,6 +164,18 @@ pub fn strip_thinking_blocks(text: &str) -> String {
     clean_text.trim().to_string()
 }
 
+/// Extracts follow-up suggestions in the format [SUGGESTION: Action Text]
+pub fn extract_suggestions(text: &str) -> Vec<String> {
+    let re = regex::Regex::new(r"(?i)\[SUGGESTION:\s*([^\]]+)\]").unwrap();
+    let mut results = Vec::new();
+    for cap in re.captures_iter(text) {
+        if let Some(m) = cap.get(1) {
+            results.push(m.as_str().trim().to_string());
+        }
+    }
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
