@@ -265,6 +265,11 @@ impl super::Orchestrator {
                         r.tool_name, r.action
                     ));
                     break;
+                } else if !r.ok && (r.output.contains("Search blocked by bot detection") || r.output.contains("Search failed or blocked")) {
+                    critical_fail = Some(format!(
+                        "🤖 검색 엔진에서 무작위 봇 접근을 감지하여 현재 IP가 일시적으로 검색 차단되었습니다.\n\n*해결 방법: 잠시 후 다시 시도하시거나, Google/Tavily API 키를 설정하여 전용망 검색으로 우회해 주세요.*"
+                    ));
+                    break;
                 }
             }
             if let Some(fail_msg) = critical_fail {
@@ -336,26 +341,9 @@ impl super::Orchestrator {
                     images_base64: None,
                 });
 
-                // --- Background Tasks (Reflector & Transcript) ---
-                let orchestrator_clone = self.clone();
-                let history_clone = history.clone();
-                let log_tx_clone = log_tx.clone();
-                let session_id_clone = session_id.clone();
-                let result_summary_clone = result_summary_md.clone();
 
-                tokio::spawn(async move {
-                    // Auto-Memory Consolidation (Reflector Phase)
-                    if loop_count > 1
-                        || (!result_summary_clone.is_empty()
-                            && result_summary_clone != "### Tool Execution Results\n")
-                    {
-                        let ref_prompt = crate::agent::prompts::get_fallback_reflector_prompt();
-                        orchestrator_clone
-                            .run_reflector_pipeline(ref_prompt, history_clone.clone(), log_tx_clone)
-                            .await;
-                    }
-                    orchestrator_clone.save_transcript(session_id_clone, &history_clone);
-                });
+                // Save transcript and return
+                self.save_transcript(session_id.clone(), &history);
 
                 let mut final_out = Self::sanitize_output(&writer_res.content);
                 if final_out.trim().is_empty() {

@@ -9,7 +9,6 @@ pub async fn scrape_duckduckgo(
     num: u32,
 ) -> Result<Vec<SearchResultItem>, Box<dyn Error + Send + Sync>> {
     let url = "https://lite.duckduckgo.com/lite/";
-
     let mut params = std::collections::HashMap::new();
     params.insert("q", query);
     params.insert("v", "l");
@@ -19,7 +18,15 @@ pub async fn scrape_duckduckgo(
         }
     }
 
-    let resp = client.post(url).form(&params).send().await?;
+    let resp = client
+        .post(url)
+        .header("Referer", "https://lite.duckduckgo.com/")
+        .header("Origin", "https://lite.duckduckgo.com")
+        .header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+        .form(&params)
+        .send()
+        .await?;
+
     let status = resp.status();
     if !status.is_success() {
         let body_preview = resp.text().await.unwrap_or_default();
@@ -32,6 +39,17 @@ pub async fn scrape_duckduckgo(
     }
 
     let body = resp.text().await?;
+
+    // Bot detection check
+    let body_lower = body.to_lowercase();
+    if body_lower.contains("security check")
+        || body_lower.contains("verify you are human")
+        || body_lower.contains("robot")
+        || body_lower.contains("too many requests")
+    {
+        return Err("Search blocked by bot detection. Please wait or try another provider.".into());
+    }
+
     let document = Html::parse_document(&body);
     let result_link_selector = Selector::parse(".result-link").unwrap();
     let result_snippet_selector = Selector::parse(".result-snippet").unwrap();
@@ -70,4 +88,30 @@ pub async fn scrape_duckduckgo(
         }
     }
     Ok(items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rquest_util::Emulation;
+
+    #[tokio::test]
+    async fn test_scrape_duckduckgo() {
+        let client = rquest::Client::builder()
+            .emulation(Emulation::Chrome124)
+            .build()
+            .unwrap();
+
+        match scrape_duckduckgo(&client, "오늘 서울 날씨", None, 5).await {
+            Ok(results) => {
+                println!("SUCCESS! Found {} results.", results.len());
+                for r in results {
+                    println!("T: {}\nL: {}", r.title, r.link);
+                }
+            }
+            Err(e) => {
+                println!("ERROR: {}", e);
+            }
+        }
+    }
 }
