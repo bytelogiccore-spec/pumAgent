@@ -153,7 +153,12 @@
 
   let viewingLogs = $state<string[] | null>(null);
 
-
+  async function handleSelectSuggestion(text: string) {
+    if (appState.isThinking) return;
+    appState.query = text;
+    await tick();
+    submitQuery();
+  }
 </script>
 
 {#if viewingLogs}
@@ -216,6 +221,7 @@
         isThinking={appState.isThinking} 
         isLast={msg === appState.messages[appState.messages.length - 1]} 
         onViewLogs={(logs) => { viewingLogs = logs; }} 
+        onSelectSuggestion={handleSelectSuggestion}
       />
     {/each}
   </div>

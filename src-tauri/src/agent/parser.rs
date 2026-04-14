@@ -150,8 +150,6 @@ pub fn extract_json_blocks(markdown: &str) -> Vec<Value> {
 /// Aggressively strips thinking, thought, or reasoning blocks from a text string.
 /// This is used to clean outputs for both the UI and notification tools.
 pub fn strip_thinking_blocks(text: &str) -> String {
-    // Aggressive pattern to catch variants like <think>, <think >, <think style="...">, <thinking>, etc.
-    // We break it into a few broad patterns to ensure reliability.
     let patterns = vec![
         r"(?is)<[^>]*?(think|thought|thinking|thought_process|reasoning|details)\b[^>]*?>.*?(?:</[^>]*?(think|thought|thinking|thought_process|reasoning|details)\b[^>]*?>|$)",
     ];
@@ -162,6 +160,28 @@ pub fn strip_thinking_blocks(text: &str) -> String {
         }
     }
     clean_text.trim().to_string()
+}
+
+/// Extracts the content of thinking/reasoning blocks for logging/debugging.
+pub fn extract_thinking_blocks(text: &str) -> Option<String> {
+    let re = regex::Regex::new(r"(?is)<(?:think|thought|thinking|reasoning|details)[^>]*?>(.*?)(?:</(?:think|thought|thinking|reasoning|details)>|$)").unwrap();
+    let mut combined = String::new();
+    for cap in re.captures_iter(text) {
+        if let Some(m) = cap.get(1) {
+            let content = m.as_str().trim();
+            if !content.is_empty() {
+                if !combined.is_empty() {
+                    combined.push_str("\n---\n");
+                }
+                combined.push_str(content);
+            }
+        }
+    }
+    if combined.is_empty() {
+        None
+    } else {
+        Some(combined)
+    }
 }
 
 /// Extracts follow-up suggestions in the format [SUGGESTION: Action Text]

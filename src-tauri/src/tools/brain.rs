@@ -53,10 +53,7 @@ impl BrainTool {
     pub fn write_artifact(&self, name: &str, content: &str) -> Result<String, String> {
         let trimmed_name = name.trim();
         let final_name = if trimmed_name.is_empty() {
-            format!(
-                "Memory_{}",
-                chrono::Local::now().format("%y%m%d_%H%M%S")
-            )
+            format!("Memory_{}", chrono::Local::now().format("%y%m%d_%H%M%S"))
         } else {
             trimmed_name.to_string()
         };

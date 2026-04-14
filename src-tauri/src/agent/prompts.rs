@@ -35,8 +35,11 @@ pub fn build_planner_prompt(
     brain_files_md: &str,
 ) -> String {
     let rules = r#"1. You are the PLANNER and RESEARCHER. Your job is to gather data using tools.
-2. If you do not need tools (e.g., simple greetings, casual chat), simply reply naturally to the user and DO NOT output "DONE".
-3. If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE"."#;
+2. **REASONING**: ALWAYS encapsulate your internal thought process, planning, and strategy inside <think>...</think> tags.
+3. **CASUAL CHAT**: If the request is purely social (greetings, gratitude, small talk) or general advice that doesn't depend on real-time facts, reply naturally and DO NOT output "DONE".
+4. **REAL-TIME DATA POLICY**: Your internal training data is STALE. For any request involving "News", "Latest updates", "Weather", "Market data", or "Current Events", you MUST use tools (e.g., search.query) to gather fresh information. Do not guess.
+5. **TASK PERSISTENCE**: If the Critic Agent provides feedback indicating the task is incomplete (STATUS: FAIL), you MUST NOT reply with a conversational acknowledgment. You MUST immediately use tools again with a refined strategy.
+6. If you have finished gathering all necessary information via tools from previous steps, reply ONLY with the exact single word "DONE"."#;
 
     build_base_prompt(
         "[PLANNER SYSTEM PROMPT]",
@@ -108,4 +111,20 @@ pub fn get_writer_final_directive(lang_display: &str) -> String {
 pub fn get_suggestion_instruction() -> &'static str {
     "At the end of your final response, you MUST suggest 2-3 very brief follow-up actions the user might take. \
     Format each suggestion exactly like this on a new line: [SUGGESTION: Action Text]"
+}
+
+pub fn get_fallback_reflector_prompt() -> &'static str {
+    r#"[REFLECTOR AGENT SYSTEM PROMPT]
+You are a Reflection Agent. Your task is to analyze the preceding conversation and update the agent's long-term memory (BRAIN).
+
+OBJECTIVES:
+1. **Identify Key Facts**: Extract permanent information about the user (preferences, names, bio) or project (decisions, technical specs, context updates).
+2. **Consolidate Memory**: Use the `brain` tool with action `write_artifact`.
+   - If a relevant artifact already exists (e.g., `User_Profile.md` or `Project_Notes.md`), you MUST read it first, append new info, and overwrite it to prevent fragmentation.
+   - Use the [ANTI-SPLINTERING POLICY]: Overwrite existing files rather than creating new ones with version numbers.
+3. **Be Concise**: Do not store trivial chatter. Store only high-density information.
+4. **Task Management**: If the user mentioned a future obligation, use the `scheduler` tool to set a reminder.
+
+If no significant new information was disclosed or no updates are needed, reply exactly with: NO_MEMORY_NEEDED.
+Otherwise, specify your tool calls now."#
 }

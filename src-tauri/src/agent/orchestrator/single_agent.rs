@@ -226,7 +226,25 @@ impl super::Orchestrator {
                         serde_json::json!({"key": "log.final_round_success", "args": {}})
                     ))
                     .await;
-                self.save_transcript(session_id, &history);
+
+                // --- Background Tasks (Reflector & Transcript) ---
+                let orchestrator_clone = self.clone();
+                let history_clone = history.clone();
+                let log_tx_clone = log_tx.clone();
+                let session_id_clone = session_id.clone();
+
+                tokio::spawn(async move {
+                    // Auto-Memory Consolidation (Reflector Phase)
+                    // Only reflect if this wasn't just a simple one-shot chat (loop_count > 1)
+                    if loop_count > 1 {
+                        let ref_prompt = crate::agent::prompts::get_fallback_reflector_prompt();
+                        orchestrator_clone
+                            .run_reflector_pipeline(ref_prompt, history_clone.clone(), log_tx_clone)
+                            .await;
+                    }
+                    orchestrator_clone.save_transcript(session_id_clone, &history_clone);
+                });
+
                 return Ok((Self::sanitize_output(&ai_text), history));
             }
 
@@ -283,6 +301,11 @@ impl super::Orchestrator {
         }) = history.last()
         {
             if r == "assistant" {
+                // Auto-Memory Consolidation (Reflector Phase)
+                let ref_prompt = crate::agent::prompts::get_fallback_reflector_prompt();
+                self.run_reflector_pipeline(ref_prompt, history.clone(), log_tx)
+                    .await;
+
                 self.save_transcript(session_id, &history);
                 return Ok((Self::sanitize_output(c), history));
             }

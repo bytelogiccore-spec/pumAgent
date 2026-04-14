@@ -134,6 +134,15 @@ impl super::Orchestrator {
                 .run_planner_phase(&history, &mut active_planner_id, &log_tx, loop_count)
                 .await?;
 
+            if let Some(reasoning) = crate::agent::parser::extract_thinking_blocks(&planner_res.content) {
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.agent_reasoning", "args": {"agent": "Planner", "content": reasoning}})
+                    ))
+                    .await;
+            }
+
             let mut json_blocks = planner_res.native_tool_calls.clone();
 
             // AI Hallucination Fallback: If native processing yields 0 tools but there's a JSON block
@@ -144,8 +153,12 @@ impl super::Orchestrator {
             if json_blocks.is_empty() {
                 let text_res = planner_res.content.trim();
 
-                // If it doesn't say "DONE", it means planner replied directly
-                if !text_res.to_uppercase().contains("DONE") {
+                // If it doesn't say "DONE" as a standalone word at the end, it means planner replied directly
+                let text_upper = text_res.to_uppercase();
+                let is_done = text_upper.trim() == "DONE"
+                    || text_upper.trim_end().ends_with("\nDONE")
+                    || text_upper.trim_end().ends_with(" DONE");
+                if !is_done {
                     let _ = log_tx
                         .send(format!(
                             "i18n:{}",
@@ -263,6 +276,15 @@ impl super::Orchestrator {
                 .await
                 .unwrap();
 
+            if let Some(reasoning) = crate::agent::parser::extract_thinking_blocks(&critic_res.content) {
+                let _ = log_tx
+                    .send(format!(
+                        "i18n:{}",
+                        serde_json::json!({"key": "log.agent_reasoning", "args": {"agent": "Critic", "content": reasoning}})
+                    ))
+                    .await;
+            }
+
             if critic_res.content.contains("STATUS: PASS") {
                 let _ = log_tx
                     .send(format!(
@@ -272,7 +294,7 @@ impl super::Orchestrator {
                     .await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
-                    content: result_summary_md,
+                    content: result_summary_md.clone(),
                     images_base64: None,
                 });
 
@@ -294,7 +316,28 @@ impl super::Orchestrator {
                     content: writer_res.content.clone(),
                     images_base64: None,
                 });
-                self.save_transcript(session_id.clone(), &history);
+
+                // --- Background Tasks (Reflector & Transcript) ---
+                let orchestrator_clone = self.clone();
+                let history_clone = history.clone();
+                let log_tx_clone = log_tx.clone();
+                let session_id_clone = session_id.clone();
+                let result_summary_clone = result_summary_md.clone();
+
+                tokio::spawn(async move {
+                    // Auto-Memory Consolidation (Reflector Phase)
+                    if loop_count > 1
+                        || (!result_summary_clone.is_empty()
+                            && result_summary_clone != "### Tool Execution Results\n")
+                    {
+                        let ref_prompt = crate::agent::prompts::get_fallback_reflector_prompt();
+                        orchestrator_clone
+                            .run_reflector_pipeline(ref_prompt, history_clone.clone(), log_tx_clone)
+                            .await;
+                    }
+                    orchestrator_clone.save_transcript(session_id_clone, &history_clone);
+                });
+
                 return Ok((Self::sanitize_output(&writer_res.content), history));
             } else {
                 let fb = critic_res
@@ -310,7 +353,17 @@ impl super::Orchestrator {
                     .await;
                 history.push(ChatMessage {
                     role: "user".to_string(),
-                    content: format!("SYSTEM OBSERVATION RESULTS:\n{}\n\n[Critic Agent Feedback]\nYour last tool executed, but the task is not yet complete. Critic feedback: {}\nPlease use tools again with different strategies to fulfill the task.", result_summary_md, fb),
+                    content: format!(
+                        "### SYSTEM OBSERVATION RESULTS\n{}\n\n\
+                        ### [CRITICAL] CRITIC AGENT FEEDBACK: STATUS: FAIL\n\
+                        The task is NOT yet complete. Critic feedback: \"{}\"\n\n\
+                        **PLANNER DIRECTIVE**:\n\
+                        1. DO NOT provide a conversational response or explanation.\n\
+                        2. DO NOT output 'DONE'.\n\
+                        3. You MUST use tools now to address the Critic's feedback and gather the missing data.\n\
+                        4. Refine your query or try a different search engine/tool if necessary.",
+                        result_summary_md, fb
+                    ),
                     images_base64: None,
                 });
             }

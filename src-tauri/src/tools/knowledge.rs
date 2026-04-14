@@ -17,24 +17,23 @@ impl KnowledgeTool {
 
         let trimmed_name = name.trim();
         let final_name = if trimmed_name.is_empty() {
-            format!(
-                "Untitled_{}",
-                chrono::Local::now().format("%y%m%d_%H%M%S")
-            )
+            format!("Untitled_{}", chrono::Local::now().format("%y%m%d_%H%M%S"))
         } else {
             trimmed_name.to_string()
         };
 
-        let ext_name =
-            if !final_name.ends_with(".md") && !final_name.ends_with(".json") && !final_name.ends_with(".txt") {
-                if domain == "schedules" {
-                    format!("{}.json", final_name)
-                } else {
-                    format!("{}.md", final_name)
-                }
+        let ext_name = if !final_name.ends_with(".md")
+            && !final_name.ends_with(".json")
+            && !final_name.ends_with(".txt")
+        {
+            if domain == "schedules" {
+                format!("{}.json", final_name)
             } else {
-                final_name
-            };
+                format!("{}.md", final_name)
+            }
+        } else {
+            final_name
+        };
         Ok(format!("{}:{}", domain, ext_name))
     }
 

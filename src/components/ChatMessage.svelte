@@ -26,8 +26,20 @@
   export let isThinking: boolean = false;
   export let isLast: boolean = false;
   export let onViewLogs: (logs: string[]) => void = () => {};
+  export let onSelectSuggestion: (text: string) => void = () => {};
 
   let messageElement: HTMLElement;
+  let suggestions: string[] = [];
+
+  $: {
+    const regex = /\[SUGGESTION:\s*([^\]]+)\]/gi;
+    let match;
+    const foundSuggestions: string[] = [];
+    while ((match = regex.exec(msg.content)) !== null) {
+      foundSuggestions.push(match[1].trim());
+    }
+    suggestions = foundSuggestions;
+  }
 
   async function processMermaid() {
     if (!messageElement || !msg || msg.role !== "assistant") return;
@@ -73,6 +85,9 @@
     processed = processed.replace(/<\|channel>thought([\s\S]*?)<channel\|>/gi, (match, p1) => {
         return `<details class="reasoning-block"><summary class="reasoning-summary">${t("chat.think_process")}</summary><div class="reasoning-content">${p1.trim()}</div></details>\n\n`;
     });
+    // 3. Remove suggestion tags from markdown output
+    processed = processed.replace(/\[SUGGESTION:\s*([^\]]+)\]/gi, "");
+
     return DOMPurify.sanitize(marked.parse(processed) as string, { 
         ADD_ATTR: ['target', 'class', 'style'], 
         ADD_TAGS: ['details', 'summary', 'math', 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mspace', 'msqrt', 'mstyle', 'merror', 'mpadded', 'mphantom', 'mfenced', 'msub', 'msup', 'msubsup', 'mover', 'munder', 'munderover', 'mtd', 'mtr', 'mtable', 'mroot', 'mlabeledtr', 'maction'],
@@ -92,6 +107,20 @@
       <div bind:this={messageElement}>
         {@html formatContent(msg.content)}
       </div>
+
+      {#if msg.role === "assistant" && suggestions.length > 0}
+        <div class="suggestions-container">
+          {#each suggestions as suggestion}
+            <button 
+              class="suggestion-pill" 
+              on:click={() => onSelectSuggestion(suggestion)}
+            >
+              <span style="margin-right: 4px;">✨</span> {suggestion}
+            </button>
+          {/each}
+        </div>
+      {/if}
+
       {#if msg.logs && msg.logs.length > 0}
         <div style="margin-top: 8px; border-top: 1px dashed #d1d5db; padding-top: 8px;">
           <button on:click={viewLogs} style="background:transparent; border:1px solid #9ca3af; border-radius:4px; font-size:0.75rem; cursor:pointer; color:#4b5563;">
@@ -210,5 +239,32 @@
     color: #4b5563;
     font-family: inherit;
     line-height: 1.5;
+  }
+
+  /* Suggestion Pills Styling */
+  .suggestions-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #d1d5db;
+  }
+  .suggestion-pill {
+    background: #fdfaf3;
+    border: 1px solid #1a1a1a;
+    padding: 6px 14px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #1a1a1a;
+    border-radius: 0; /* Match current UI style */
+  }
+  .suggestion-pill:hover {
+    background: #1a1a1a;
+    color: #f5f3ed;
+    transform: translateY(-2px);
+    box-shadow: 4px 4px 0px rgba(0,0,0,0.1);
   }
 </style>

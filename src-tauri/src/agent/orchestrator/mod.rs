@@ -6,6 +6,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct OrchestratorRouting {
     pub endpoints: Vec<crate::config::LlmEndpoint>,
     pub planner_id: String,
@@ -16,6 +17,7 @@ pub struct OrchestratorRouting {
     pub registry_id: String,
 }
 
+#[derive(Clone)]
 pub struct Orchestrator {
     routing: OrchestratorRouting,
     multi_agent: Arc<MultiAgent>,
@@ -239,11 +241,11 @@ impl Orchestrator {
         }
 
         let mut rules_combined = format!("{}{}", rules_str, modules_str);
-        
+
         // Add follow-up suggestion instruction
         rules_combined.push_str("\n[FOLLOW-UP SUGGESTIONS]\n");
         rules_combined.push_str(crate::agent::prompts::get_suggestion_instruction());
-        rules_combined.push_str("\n");
+        rules_combined.push('\n');
 
         let combined_rules_modules = rules_combined;
 
@@ -289,7 +291,7 @@ impl Orchestrator {
         if let Some(pos) = clean.find("*(Self-Correction Check") {
             clean = clean[..pos].to_string();
         }
-        
+
         clean.trim().to_string()
     }
 

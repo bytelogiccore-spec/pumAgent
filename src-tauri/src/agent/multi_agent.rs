@@ -83,11 +83,56 @@ impl MultiAgent {
                 "type": "function",
                 "function": {
                     "name": "crawl4ai",
-                    "description": "Read webpage content. CRITICAL: For URLs, use this FIRST before searching.",
+                    "description": "Crawl and extract full, structured content from a specific URL. Use this to gather detailed data from links found via search to satisfy data compilation requests.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "action": { "type": "string", "enum": ["scrape"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "http",
+                    "description": "Perform raw HTTP requests (GET, POST, etc.). Use this for direct API interactions or when standard crawling is blocked.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["request"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "scripting",
+                    "description": "Execute internal Rhai scripts for complex data processing, calculations, or multi-step logic.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["run_rhai"] },
+                            "args": { "type": "object" }
+                        },
+                        "required": ["action", "args"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "vault",
+                    "description": "Manage secure credentials and API keys in the system vault.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["request", "delete"] },
                             "args": { "type": "object" }
                         },
                         "required": ["action", "args"]
