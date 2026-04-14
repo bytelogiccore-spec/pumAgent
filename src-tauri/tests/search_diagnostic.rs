@@ -14,7 +14,7 @@ async fn test_search_connectivity_diagnostic() {
     }
     
     // Create a dummy config (search_provider=duckduckgo by default)
-    let config_path = base_dir.join("config.json");
+    let config_path = base_dir.join("agent_config.json");
     if !config_path.exists() {
         let default_config = AppConfig::load(&base_dir); // returns default
         let _ = default_config.save(&base_dir);

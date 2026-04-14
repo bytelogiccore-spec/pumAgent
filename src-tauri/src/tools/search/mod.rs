@@ -2,7 +2,6 @@ pub mod duckduckgo;
 pub mod google;
 pub mod models;
 pub mod tavily;
-pub mod yahoo;
 
 use duckduckgo::scrape_duckduckgo;
 use google::search_google;
@@ -13,7 +12,6 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tavily::search_tavily;
 use tokio::time::sleep;
-use yahoo::scrape_yahoo;
 
 pub struct SearchTool {
     last_request: Mutex<Option<Instant>>,
@@ -69,12 +67,17 @@ impl SearchTool {
         let client = Self::get_spoofed_client()?;
 
         let mut results = vec![];
+        let mut errors = vec![];
         let provider = config.search_provider.as_str();
 
         if provider == "tavily" && !config.tavily_api_key.is_empty() {
             match search_tavily(&client, query, &config.tavily_api_key).await {
                 Ok(api_results) => results.extend(api_results),
-                Err(e) => log::error!("Tavily failed: {}", e),
+                Err(e) => {
+                    let err_msg = format!("Tavily: {}", e);
+                    log::error!("{}", err_msg);
+                    errors.push(err_msg);
+                }
             }
         } else if provider == "google"
             && !config.google_api_key.is_empty()
@@ -82,28 +85,38 @@ impl SearchTool {
         {
             match search_google(&client, query, &config.google_api_key, &config.google_cx).await {
                 Ok(api_results) => results.extend(api_results),
-                Err(e) => log::error!("Google API failed: {}", e),
+                Err(e) => {
+                    let err_msg = format!("Google: {}", e);
+                    log::error!("{}", err_msg);
+                    errors.push(err_msg);
+                }
             }
         }
 
         // If specific provider API failed or returned 0 results, OR provider is duckduckgo -> fallback to Web Scraper
-        if results.is_empty() && results.len() < (num as usize) / 2 {
+        if results.is_empty() {
             match scrape_duckduckgo(&client, query, time_range, num).await {
-                Ok(ddg_results) => results.extend(ddg_results),
-                Err(e) => log::error!("Meta-Search: DuckDuckGo failed! {} - Falling back...", e),
-            }
-
-            if results.len() < (num as usize) / 2 {
-                self.rate_limit().await;
-                match scrape_yahoo(&client, query, num).await {
-                    Ok(yahoo_results) => results.extend(yahoo_results),
-                    Err(e) => log::error!("Meta-Search: Yahoo Fallback failed! {}", e),
+                Ok(ddg_results) => {
+                    if ddg_results.is_empty() {
+                        errors.push("DuckDuckGo: No organic results found for this query.".to_string());
+                    }
+                    results.extend(ddg_results);
+                },
+                Err(e) => {
+                    let err_msg = format!("DuckDuckGo: {}", e);
+                    log::error!("{}", err_msg);
+                    errors.push(err_msg);
                 }
             }
         }
 
         if results.is_empty() {
-            return Err("All search engines failed or blocked the request.".into());
+            let combined_errors = if errors.is_empty() {
+                "No results found.".to_string()
+            } else {
+                errors.join(" | ")
+            };
+            return Err(format!("Search failed or blocked. Details: {}", combined_errors).into());
         }
 
         // Sort dynamically by recency score (Descending: High score first)

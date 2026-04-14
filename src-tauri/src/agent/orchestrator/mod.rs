@@ -317,9 +317,8 @@ impl Orchestrator {
         for msg in history {
             out.push_str(&format!("### Role: {}\n", msg.role.to_uppercase()));
 
-            // Strip out <think> blocks for a cleaner markdown log using the robust parser
-            let clean_content = crate::agent::parser::strip_thinking_blocks(&msg.content);
-            out.push_str(&format!("{}\n\n---\n", clean_content.trim()));
+            // DO NOT strip anything. The user explicitly requested RAW diagnostic logging for intermediate phases.
+            out.push_str(&format!("{}\n\n---\n", msg.content.trim()));
         }
 
         // We truncate(true) because `history` contains the FULL array of messages from Svelte.

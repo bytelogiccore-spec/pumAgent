@@ -20,8 +20,15 @@ pub async fn scrape_duckduckgo(
     }
 
     let resp = client.post(url).form(&params).send().await?;
-    if !resp.status().is_success() {
-        return Err(format!("DDG Error: {}", resp.status()).into());
+    let status = resp.status();
+    if !status.is_success() {
+        let body_preview = resp.text().await.unwrap_or_default();
+        let preview = if body_preview.len() > 100 {
+            format!("{}...", &body_preview[..100])
+        } else {
+            body_preview
+        };
+        return Err(format!("DDG Error: {} - Body: {}", status, preview).into());
     }
 
     let body = resp.text().await?;

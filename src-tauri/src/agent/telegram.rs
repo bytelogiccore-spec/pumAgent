@@ -176,7 +176,10 @@ async fn process_telegram_request(
     text: String,
     state: TelegramState,
 ) -> ResponseResult<()> {
-    let (config, base_dir, multi_agent, app_handle, db) = &*state;
+    let (_, base_dir, multi_agent, app_handle, db) = &*state;
+    
+    // Always load the LATEST config from disk to ensure prompt updates are reflected immediately
+    let config = AppConfig::load(base_dir);
 
     log::info!("Telegram Processing: chat_id={}, text={}", chat_id, text);
 

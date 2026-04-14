@@ -165,13 +165,19 @@ impl super::Orchestrator {
                             serde_json::json!({"key": "log.planner_direct_answer", "args": {}})
                         ))
                         .await;
+                    
+                    let mut final_out = Self::sanitize_output(text_res);
+                    if final_out.trim().is_empty() {
+                        final_out = "⚠️ [시스템 알림] 에이전트가 내부 생각(태그)만 작성하고 유저에게 보낼 답변을 적지 않았습니다. 다시 한 번 요청해 주세요.".to_string();
+                    }
+
                     history.push(ChatMessage {
                         role: "assistant".to_string(),
-                        content: text_res.to_string(),
+                        content: final_out.clone(),
                         images_base64: None,
                     });
                     self.save_transcript(session_id.clone(), &history);
-                    return Ok((Self::sanitize_output(text_res), history));
+                    return Ok((final_out, history));
                 }
 
                 let _ = log_tx
@@ -199,7 +205,11 @@ impl super::Orchestrator {
                     images_base64: None,
                 });
                 self.save_transcript(session_id.clone(), &history);
-                return Ok((Self::sanitize_output(&writer_res.content), history));
+                let mut final_out = Self::sanitize_output(&writer_res.content);
+                if final_out.trim().is_empty() {
+                     final_out = "⚠️ [시스템 알림] Writer 에이전트의 답변 생성 중 오류가 발생하여 최종 메시지가 비어 있습니다.".to_string();
+                }
+                return Ok((final_out, history));
             }
 
             // Execute Tools
@@ -222,7 +232,16 @@ impl super::Orchestrator {
             let mut result_summary_md = String::from("### Tool Execution Results\n");
             for r in &results {
                 let status = if r.ok { "SUCCESS" } else { "FAIL" };
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name, "action": r.action, "status": status}}))).await;
+                let detail = if !r.ok {
+                    let mut preview: String = r.output.chars().take(150).collect();
+                    if r.output.chars().count() > 150 {
+                        preview.push_str("...");
+                    }
+                    format!(" (사유: {})", preview.replace('\n', " "))
+                } else {
+                    "".to_string()
+                };
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name.clone(), "action": r.action.clone(), "status": status, "detail": detail}}))).await;
 
                 if r.ok
                     && (r.action == "write" || r.action == "write_artifact")
@@ -338,7 +357,11 @@ impl super::Orchestrator {
                     orchestrator_clone.save_transcript(session_id_clone, &history_clone);
                 });
 
-                return Ok((Self::sanitize_output(&writer_res.content), history));
+                let mut final_out = Self::sanitize_output(&writer_res.content);
+                if final_out.trim().is_empty() {
+                     final_out = "⚠️ [시스템 알림] 검증(Critic) 이후 Writer 에이전트의 답변 생성 중 오류가 발생하여 메시지가 비어 있습니다.".to_string();
+                }
+                return Ok((final_out, history));
             } else {
                 let fb = critic_res
                     .content
