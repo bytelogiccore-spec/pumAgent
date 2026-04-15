@@ -50,6 +50,11 @@
       triggerHeartbeat();
     });
 
+    listen<{ active: boolean; chat_id?: string }>("telegram_activity", (event) => {
+      appState.telegramOverlayActive = !!event.payload?.active;
+      appState.telegramOverlayChatId = event.payload?.chat_id || "";
+    });
+
     try {
       let loadedConfig: any = await invoke("load_config");
       appState.config = { ...appState.config, ...loadedConfig };
@@ -109,6 +114,21 @@
       <LogPanel />
     {/if}
   </div>
+
+  {#if appState.telegramOverlayActive}
+    <div class="telegram-overlay">
+      <div class="telegram-overlay-card">
+        <div class="telegram-overlay-logo">🌐</div>
+        <div class="telegram-overlay-title">Telegram 소통중</div>
+        <div class="telegram-overlay-sub">
+          {t("settings.lang_custom_display")}
+          {#if appState.telegramOverlayChatId}
+            · Chat {appState.telegramOverlayChatId}
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 </main>
 
 <style>
@@ -142,5 +162,39 @@
   .blur-bg {
     filter: blur(4px);
     pointer-events: none;
+  }
+  .telegram-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 11000;
+    background: rgba(10, 12, 20, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .telegram-overlay-card {
+    min-width: 320px;
+    max-width: 90vw;
+    background: #111827;
+    color: #f9fafb;
+    border: 1px solid #374151;
+    border-radius: 14px;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+    padding: 18px 22px;
+    text-align: center;
+  }
+  .telegram-overlay-logo {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+  .telegram-overlay-title {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+  .telegram-overlay-sub {
+    font-size: 12px;
+    color: #93c5fd;
   }
 </style>

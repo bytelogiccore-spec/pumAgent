@@ -102,6 +102,8 @@ export const appState = $state({
   pendingUserQueries: [] as string[],
   pendingHeartbeat: false,
   heartbeatRemainingSec: 0,
+  telegramOverlayActive: false,
+  telegramOverlayChatId: "",
 });
 
 export function addLog(msg: string) {
