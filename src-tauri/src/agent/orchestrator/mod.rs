@@ -241,7 +241,8 @@ impl Orchestrator {
             modules_str.push_str("- No custom skills or workflows learned yet.\n");
         }
 
-        let mut rules_combined = format!("{}{}\n\n{}", rules_str, modules_str, structured_memory_md);
+        let mut rules_combined =
+            format!("{}{}\n\n{}", rules_str, modules_str, structured_memory_md);
 
         // Add follow-up suggestion instruction
         rules_combined.push_str("\n[FOLLOW-UP SUGGESTIONS]\n");
@@ -298,10 +299,7 @@ impl Orchestrator {
         clean.trim().to_string()
     }
 
-    pub async fn maybe_compact_messages(
-        &self,
-        mut messages: Vec<ChatMessage>,
-    ) -> Vec<ChatMessage> {
+    pub async fn maybe_compact_messages(&self, mut messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
         let config = crate::config::AppConfig::load(&self.base_dir);
         if !config.compaction_enabled {
             return messages;
@@ -330,7 +328,10 @@ impl Orchestrator {
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: format!("Summarize this previous conversation context:\n\n{}", combined),
+                content: format!(
+                    "Summarize this previous conversation context:\n\n{}",
+                    combined
+                ),
                 images_base64: None,
             },
         ];
@@ -338,10 +339,7 @@ impl Orchestrator {
         if let Ok(summary) = self.get_llm_for_worker().chat(&prompt, 0.3).await {
             let mut compacted = vec![ChatMessage {
                 role: "system".to_string(),
-                content: format!(
-                    "[COMPACTED CONTEXT SUMMARY]\n{}",
-                    summary.content.trim()
-                ),
+                content: format!("[COMPACTED CONTEXT SUMMARY]\n{}", summary.content.trim()),
                 images_base64: None,
             }];
             compacted.extend(messages.drain(cutoff..));

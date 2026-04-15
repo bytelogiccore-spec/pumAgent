@@ -79,14 +79,74 @@ fn default_external_tool_kind() -> String {
 }
 
 impl MultiAgent {
+    fn schema_description_for_tool(tool: &str) -> &'static str {
+        match tool {
+            "search" => "Google Search for finding external information.",
+            "crawl4ai" => "Crawl and extract full, structured content from a specific URL. Use this to gather detailed data from links found via search to satisfy data compilation requests.",
+            "http" => "Perform raw HTTP requests (GET, POST, etc.). Use this for direct API interactions or when standard crawling is blocked.",
+            "scripting" => "Execute internal Rhai scripts for complex data processing, calculations, or multi-step logic.",
+            "vault" => "Manage secure credentials and API keys in the system vault.",
+            "brain" => "Manage long-term memory artifacts (list, read, write_artifact).",
+            "terminal" => "Execute Shell commands.",
+            "knowledge" => "Manage rules, workflows, schedules.",
+            "telegram" => "Send notifications to Telegram.",
+            "moltbook" => "Interact with Moltbook API (social network). actions include 'status', 'register', 'home', 'search', 'feed', 'create_post', 'create_comment', 'verify'.",
+            "pumai" => "Read-only access to PumAI marketplace and knowledge endpoints. actions: health, market_list, market_get, knowledge_fetch.",
+            _ => "Tool schema",
+        }
+    }
+
+    fn schema_required_fields_for_tool(tool: &str, action: &str) -> Vec<&'static str> {
+        let _ = Self::required_args_for_tool(tool, action);
+        vec!["action", "args"]
+    }
+
+    fn build_schema_for_tool(
+        tool: &str,
+        description: &str,
+        actions: &[&str],
+        required: &[&str],
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": tool,
+                "description": description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": actions },
+                        "args": { "type": "object" }
+                    },
+                    "required": required
+                }
+            }
+        })
+    }
+
     fn allowed_actions_for_tool(tool: &str) -> Option<&'static [&'static str]> {
         match tool {
             "search" => Some(&["query"]),
+            "crawl4ai" => Some(&["scrape"]),
             "terminal" => Some(&["execute"]),
             "http" => Some(&["request"]),
             "scripting" => Some(&["run_rhai"]),
+            "brain" => Some(&["list", "read", "write_artifact", "summarize"]),
+            "knowledge" => Some(&["list", "read", "write", "delete", "summarize"]),
             "telegram" => Some(&["send_message"]),
             "vault" => Some(&["request", "delete"]),
+            "moltbook" => Some(&[
+                "status",
+                "register",
+                "home",
+                "search",
+                "feed",
+                "create_post",
+                "create_comment",
+                "verify",
+                "request",
+            ]),
+            "pumai" => Some(&["health", "market_list", "market_get", "knowledge_fetch"]),
             _ => None,
         }
     }
@@ -94,11 +154,16 @@ impl MultiAgent {
     fn default_action_for_tool(tool: &str) -> Option<&'static str> {
         match tool {
             "search" => Some("query"),
+            "crawl4ai" => Some("scrape"),
             "terminal" => Some("execute"),
             "http" => Some("request"),
             "scripting" => Some("run_rhai"),
+            "brain" => Some("list"),
+            "knowledge" => Some("list"),
             "telegram" => Some("send_message"),
             "vault" => Some("request"),
+            "moltbook" => Some("status"),
+            "pumai" => Some("health"),
             _ => None,
         }
     }
@@ -106,11 +171,14 @@ impl MultiAgent {
     fn required_args_for_tool(tool: &str, action: &str) -> &'static [&'static str] {
         match (tool, action) {
             ("search", "query") => &["query"],
+            ("crawl4ai", "scrape") => &["url"],
             ("terminal", "execute") => &["command"],
             ("http", "request") => &["url"],
             ("scripting", "run_rhai") => &["script"],
             ("telegram", "send_message") => &["message"],
             ("vault", "request") | ("vault", "delete") => &["key"],
+            ("pumai", "market_get") => &["item_id"],
+            ("pumai", "knowledge_fetch") => &["knowledge_id"],
             _ => &[],
         }
     }
@@ -123,7 +191,8 @@ impl MultiAgent {
                         if let Some(v) = obj.get("action").cloned() {
                             if v.as_str().unwrap_or("").trim().len() > 1 {
                                 obj.insert("query".to_string(), v);
-                                anomalies.push("search args.action promoted to args.query".to_string());
+                                anomalies
+                                    .push("search args.action promoted to args.query".to_string());
                             }
                         }
                     }
@@ -133,7 +202,9 @@ impl MultiAgent {
                         if let Some(code) = obj.get("code").cloned() {
                             if code.as_str().unwrap_or("").trim().len() > 1 {
                                 obj.insert("script".to_string(), code);
-                                anomalies.push("scripting args.code promoted to args.script".to_string());
+                                anomalies.push(
+                                    "scripting args.code promoted to args.script".to_string(),
+                                );
                             }
                         }
                     }
@@ -143,7 +214,8 @@ impl MultiAgent {
                         if let Some(endpoint) = obj.get("endpoint").cloned() {
                             if endpoint.as_str().unwrap_or("").trim().len() > 1 {
                                 obj.insert("url".to_string(), endpoint);
-                                anomalies.push("http args.endpoint promoted to args.url".to_string());
+                                anomalies
+                                    .push("http args.endpoint promoted to args.url".to_string());
                             }
                         }
                     }
@@ -154,7 +226,8 @@ impl MultiAgent {
                                 "method".to_string(),
                                 serde_json::Value::String(normalized_method.clone()),
                             );
-                            anomalies.push(format!("http method normalized to '{}'", normalized_method));
+                            anomalies
+                                .push(format!("http method normalized to '{}'", normalized_method));
                         }
                     }
                 }
@@ -163,7 +236,9 @@ impl MultiAgent {
                         if let Some(v) = obj.get("text").cloned() {
                             if v.as_str().unwrap_or("").trim().len() > 1 {
                                 obj.insert("message".to_string(), v);
-                                anomalies.push("telegram args.text promoted to args.message".to_string());
+                                anomalies.push(
+                                    "telegram args.text promoted to args.message".to_string(),
+                                );
                             }
                         }
                     }
@@ -215,7 +290,10 @@ impl MultiAgent {
             ));
         }
 
-        let mut args = raw_req.get("args").cloned().unwrap_or_else(|| raw_req.clone());
+        let mut args = raw_req
+            .get("args")
+            .cloned()
+            .unwrap_or_else(|| raw_req.clone());
 
         if let (Some(allowed), Some(default_action)) = (
             Self::allowed_actions_for_tool(&tool),
@@ -240,9 +318,13 @@ impl MultiAgent {
         }
     }
 
-    fn validate_normalized_request(tool: &str, action: &str, args: &serde_json::Value) -> Option<String> {
+    fn validate_normalized_request(
+        tool: &str,
+        action: &str,
+        args: &serde_json::Value,
+    ) -> Option<String> {
         if let Some(allowed_actions) = Self::allowed_actions_for_tool(tool) {
-            if !allowed_actions.iter().any(|a| *a == action) {
+            if !allowed_actions.contains(&action) {
                 return Some(format!(
                     "Unsupported action for {}: '{}' not in [{}]",
                     tool,
@@ -253,28 +335,29 @@ impl MultiAgent {
         }
 
         for req_arg in Self::required_args_for_tool(tool, action) {
-            let value = args.get(req_arg).and_then(|v| v.as_str()).unwrap_or("").trim();
+            let value = args
+                .get(req_arg)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             if value.is_empty() {
                 return Some(format!("Missing required arg: {}", req_arg));
             }
         }
 
-        match tool {
-            "http" => {
-                if action != "request" {
-                    return Some("Unsupported action for http: expected 'request'".to_string());
+        if tool == "http" {
+            if action != "request" {
+                return Some("Unsupported action for http: expected 'request'".to_string());
+            }
+            if let Some(method) = args.get("method").and_then(|v| v.as_str()) {
+                let allowed = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+                if !allowed.contains(&method.trim().to_uppercase().as_str()) {
+                    return Some(format!(
+                        "Invalid arg: method '{}' is not in [GET, POST, PUT, DELETE, PATCH]",
+                        method
+                    ));
                 }
-                if let Some(method) = args.get("method").and_then(|v| v.as_str()) {
-                    let allowed = ["GET", "POST", "PUT", "DELETE", "PATCH"];
-                    if !allowed.contains(&method.trim().to_uppercase().as_str()) {
-                        return Some(format!(
-                            "Invalid arg: method '{}' is not in [GET, POST, PUT, DELETE, PATCH]",
-                            method
-                        ));
-                    }
-                }
-            },
-            _ => {}
+            }
         }
         None
     }
@@ -408,173 +491,34 @@ impl MultiAgent {
     }
 
     pub fn get_tool_schemas(&self) -> Vec<serde_json::Value> {
-        let mut schemas = vec![
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "search",
-                    "description": "Google Search for finding external information.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["query"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "crawl4ai",
-                    "description": "Crawl and extract full, structured content from a specific URL. Use this to gather detailed data from links found via search to satisfy data compilation requests.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["scrape"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "http",
-                    "description": "Perform raw HTTP requests (GET, POST, etc.). Use this for direct API interactions or when standard crawling is blocked.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["request"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "scripting",
-                    "description": "Execute internal Rhai scripts for complex data processing, calculations, or multi-step logic.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["run_rhai"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "vault",
-                    "description": "Manage secure credentials and API keys in the system vault.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["request", "delete"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "brain",
-                    "description": "Manage long-term memory artifacts (list, read, write_artifact).",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["list", "read", "write_artifact"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "terminal",
-                    "description": "Execute Shell commands.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["execute"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "knowledge",
-                    "description": "Manage rules, workflows, schedules.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["read", "write", "list", "delete"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "telegram",
-                    "description": "Send notifications to Telegram.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["send_message"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "moltbook",
-                    "description": "Interact with Moltbook API (social network). actions include 'status', 'register', 'home', 'search', 'feed', 'create_post', 'create_comment', 'verify'.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["status", "register", "home", "search", "feed", "create_post", "create_comment", "verify"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
-            serde_json::json!({
-                "type": "function",
-                "function": {
-                    "name": "pumai",
-                    "description": "Read-only access to PumAI marketplace and knowledge endpoints. actions: health, market_list, market_get, knowledge_fetch.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": { "type": "string", "enum": ["health", "market_list", "market_get", "knowledge_fetch"] },
-                            "args": { "type": "object" }
-                        },
-                        "required": ["action", "args"]
-                    }
-                }
-            }),
+        let builtin_names = [
+            "search",
+            "crawl4ai",
+            "http",
+            "scripting",
+            "vault",
+            "brain",
+            "terminal",
+            "knowledge",
+            "telegram",
+            "moltbook",
+            "pumai",
         ];
+
+        let mut schemas = builtin_names
+            .iter()
+            .filter_map(|tool| {
+                let actions = Self::allowed_actions_for_tool(tool)?;
+                let action_for_required = actions.first().copied().unwrap_or("invoke");
+                let required = Self::schema_required_fields_for_tool(tool, action_for_required);
+                Some(Self::build_schema_for_tool(
+                    tool,
+                    Self::schema_description_for_tool(tool),
+                    actions,
+                    &required,
+                ))
+            })
+            .collect::<Vec<_>>();
 
         if let Ok(guard) = self.external_tools.read() {
             for ext in guard.values() {
@@ -707,7 +651,8 @@ impl MultiAgent {
             let tool = normalized.tool;
             let action = normalized.action;
             let mut args = normalized.args;
-            if let Some(validation_error) = Self::validate_normalized_request(&tool, &action, &args) {
+            if let Some(validation_error) = Self::validate_normalized_request(&tool, &action, &args)
+            {
                 handles.push(task::spawn(async move {
                     ToolResult {
                         tool_name: tool,

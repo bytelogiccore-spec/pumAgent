@@ -21,6 +21,32 @@ use tools::telegram_tool::TelegramTool;
 use tools::terminal::TerminalTool;
 use tools::vault_tool::VaultTool;
 
+fn stop_websurfx_sidecar(app_handle: &tauri::AppHandle) {
+    if let Some(sidecar_state) = app_handle.try_state::<crate::state::SidecarState>() {
+        if let Some(child) = sidecar_state.0.lock().unwrap().take() {
+            let pid = child.pid();
+            log::info!("Killing Websurfx Sidecar (PID: {:?})...", pid);
+            let _ = child.kill();
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .output();
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn cleanup_stale_websurfx_processes() {
+    // Best-effort cleanup for stale processes left by unexpected exits.
+    for image_name in ["websurfx-x86_64-pc-windows-msvc.exe", "websurfx.exe"] {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/IM", image_name])
+            .output();
+    }
+}
+
 // Import our isolated commands
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,6 +64,7 @@ pub fn run() {
         })
         .setup(|app| {
             let app_handle = app.handle().clone();
+            app.manage(crate::state::SidecarState(std::sync::Mutex::new(None)));
             std::panic::set_hook(Box::new(move |info| {
                 let msg = match info.payload().downcast_ref::<&'static str>() {
                     Some(s) => *s,
@@ -309,6 +336,9 @@ pub fn run() {
             let app_handle_for_sidecar = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri_plugin_shell::ShellExt;
+                #[cfg(windows)]
+                cleanup_stale_websurfx_processes();
+                stop_websurfx_sidecar(&app_handle_for_sidecar);
                 match app_handle_for_sidecar.shell().sidecar("websurfx") {
                     Ok(sidecar) => {
                         match sidecar.spawn() {
@@ -317,11 +347,15 @@ pub fn run() {
                                     "Websurfx sidecar spawned successfully (PID: {:?}).",
                                     child.pid()
                                 );
-
-                                // Store the sidecar handle in state to strictly kill it on exit
-                                app_handle_for_sidecar.manage(crate::state::SidecarState(
-                                    std::sync::Mutex::new(Some(child)),
-                                ));
+                                if let Some(state) =
+                                    app_handle_for_sidecar.try_state::<crate::state::SidecarState>()
+                                {
+                                    *state.0.lock().unwrap() = Some(child);
+                                } else {
+                                    log::warn!(
+                                        "SidecarState missing while storing websurfx child handle."
+                                    );
+                                }
 
                                 tauri::async_runtime::spawn(async move {
                                     use tauri_plugin_shell::process::CommandEvent;
@@ -395,21 +429,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
-                // Strictly kill the child process if it exists
-                if let Some(sidecar_state) = app_handle.try_state::<crate::state::SidecarState>() {
-                    if let Some(child) = sidecar_state.0.lock().unwrap().take() {
-                        let pid = child.pid();
-                        log::info!("Killing Websurfx Sidecar (PID: {:?}) on Exit...", pid);
-                        let _ = child.kill();
-
-                        #[cfg(windows)]
-                        {
-                            let _ = std::process::Command::new("taskkill")
-                                .args(&["/F", "/T", "/PID", &pid.to_string()])
-                                .output();
-                        }
-                    }
-                }
+                stop_websurfx_sidecar(app_handle);
             }
         });
 }

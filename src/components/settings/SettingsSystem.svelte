@@ -2,10 +2,60 @@
   import { appState, saveSettings, showError } from "../../lib/store.svelte";
   import { t, initLocales, localeManager } from "../../lib/i18n.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { onMount } from "svelte";
 
   let isCustomLanguage = $state(false);
   let customLangInput = $state("");
   let isTranslating = $state(false);
+  let extensions = $state<
+    { name: string; description: string; enabled: boolean; source: string }[]
+  >([]);
+  let extensionLoading = $state(false);
+  let extensionBusyMap = $state<Record<string, boolean>>({});
+
+  async function loadExtensions() {
+    extensionLoading = true;
+    try {
+      const items = await invoke<
+        { name: string; description: string; enabled: boolean; source: string }[]
+      >("list_extensions");
+      extensions = items || [];
+    } catch (e) {
+      showError(`Failed to load extensions: ${e}`);
+    } finally {
+      extensionLoading = false;
+    }
+  }
+
+  async function reloadExtensions() {
+    extensionLoading = true;
+    try {
+      await invoke("reload_extensions");
+      await loadExtensions();
+    } catch (e) {
+      showError(`Failed to reload extensions: ${e}`);
+      extensionLoading = false;
+    }
+  }
+
+  async function toggleExtension(name: string, enabled: boolean) {
+    extensionBusyMap = { ...extensionBusyMap, [name]: true };
+    try {
+      await invoke("set_extension_enabled", { extensionName: name, enabled });
+      extensions = extensions.map((ext) =>
+        ext.name === name ? { ...ext, enabled } : ext,
+      );
+    } catch (e) {
+      showError(`Failed to update extension '${name}': ${e}`);
+      await loadExtensions();
+    } finally {
+      extensionBusyMap = { ...extensionBusyMap, [name]: false };
+    }
+  }
+
+  onMount(() => {
+    loadExtensions();
+  });
 
   function onLanguageSelect(e: Event) {
     const val = (e.target as HTMLSelectElement).value;
@@ -101,6 +151,52 @@
       <option value="google">Google Custom Search API</option>
     </select>
   </label>
+</div>
+
+<div style="font-size: 0.8rem; color: #a1a1aa; font-weight: bold; margin-top: 24px; margin-bottom: 8px;">Extensions</div>
+<div class="form-group" style="border: 1px solid #1a1a1a; padding: 12px; background: #f8f6ef;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+    <div style="font-size: 0.85rem; color:#1a1a1a; font-weight: 600;">External Tool Packages</div>
+    <button class="sys-badge" onclick={reloadExtensions} disabled={extensionLoading}>
+      {extensionLoading ? "Reloading..." : "Reload"}
+    </button>
+  </div>
+
+  {#if extensionLoading && extensions.length === 0}
+    <div style="font-size: 0.85rem; color:#52525b;">Loading extensions...</div>
+  {:else if extensions.length === 0}
+    <div style="font-size: 0.85rem; color:#52525b;">No extensions found.</div>
+  {:else}
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {#each extensions as ext}
+        <div style="border:1px solid #d4d4d8; padding:10px; background:#ffffff;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+            <div style="min-width:0;">
+              <div style="font-size:0.9rem; color:#111827; font-weight:700; word-break:break-word;">
+                {ext.name}
+              </div>
+              <div style="font-size:0.8rem; color:#4b5563; margin-top:2px; word-break:break-word;">
+                {ext.description || "External extension tool"}
+              </div>
+            </div>
+            <label style="display:flex; align-items:center; gap:6px; margin:0; color:#111827; cursor:pointer; text-transform:none; letter-spacing:0;">
+              <input
+                type="checkbox"
+                checked={ext.enabled}
+                disabled={!!extensionBusyMap[ext.name]}
+                onchange={(e) => toggleExtension(ext.name, (e.target as HTMLInputElement).checked)}
+                style="width:auto;"
+              />
+              <span style="font-size:0.8rem;">{ext.enabled ? "Enabled" : "Disabled"}</span>
+            </label>
+          </div>
+          <div style="font-size:0.72rem; color:#6b7280; margin-top:6px; word-break:break-all;">
+            {ext.source}
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
 {#if appState.config.searchProvider === "tavily"}
   <div class="form-group">

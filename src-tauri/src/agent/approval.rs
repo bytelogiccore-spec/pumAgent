@@ -1,8 +1,8 @@
 use crate::tools::telegram_tool::TelegramTool;
 use rand::RngCore;
-use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 use tokio::sync::{oneshot, Mutex};
 

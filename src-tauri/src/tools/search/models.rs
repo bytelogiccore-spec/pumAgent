@@ -93,13 +93,22 @@ mod tests {
 
     #[test]
     fn source_reliability_prefers_gov_domains() {
-        assert!(source_reliability_score("https://nasa.gov/news") > source_reliability_score("https://someblog.example/post"));
+        assert!(
+            source_reliability_score("https://nasa.gov/news")
+                > source_reliability_score("https://someblog.example/post")
+        );
     }
 
     #[test]
     fn query_match_scores_higher_for_matching_text() {
-        let hi = query_match_score("rust async channels", "This post explains rust async channels and tokio patterns.");
-        let lo = query_match_score("rust async channels", "Completely unrelated gardening content.");
+        let hi = query_match_score(
+            "rust async channels",
+            "This post explains rust async channels and tokio patterns.",
+        );
+        let lo = query_match_score(
+            "rust async channels",
+            "Completely unrelated gardening content.",
+        );
         assert!(hi > lo);
     }
 }

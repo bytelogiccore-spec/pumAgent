@@ -2,9 +2,7 @@ use app_lib::agent::llm_client::ChatMessage;
 use app_lib::agent::multi_agent::MultiAgent;
 use app_lib::agent::orchestrator::Orchestrator;
 use app_lib::config::AppConfig;
-use std::path::PathBuf;
 use std::sync::Arc;
-use tokio;
 
 #[tokio::test]
 async fn test_telegram_logic_simulation() {
@@ -95,7 +93,7 @@ async fn test_telegram_logic_simulation() {
         images_base64: None,
     }];
 
-    let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<String>(100);
+    let (log_tx, _log_rx) = tokio::sync::mpsc::channel::<String>(100);
     let cancel_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     // RUN THE PIPELINE

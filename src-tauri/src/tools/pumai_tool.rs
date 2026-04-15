@@ -77,10 +77,13 @@ impl PumaiTool {
             .get("base_url")
             .and_then(|v| v.as_str())
             .unwrap_or(&cfg_base_url);
-        let api_key = args
-            .get("api_key")
-            .and_then(|v| v.as_str())
-            .or_else(|| if cfg_api_key.is_empty() { None } else { Some(cfg_api_key.as_str()) });
+        let api_key = args.get("api_key").and_then(|v| v.as_str()).or({
+            if cfg_api_key.is_empty() {
+                None
+            } else {
+                Some(cfg_api_key.as_str())
+            }
+        });
 
         if base_url.trim().is_empty() {
             return crate::agent::multi_agent::ToolResult {
@@ -107,7 +110,8 @@ impl PumaiTool {
                         query_pairs.push(("query".to_string(), query.trim().to_string()));
                     }
                 }
-                self.get(base_url, api_key, "/market/items", &query_pairs).await
+                self.get(base_url, api_key, "/market/items", &query_pairs)
+                    .await
             }
             "market_get" => {
                 let item_id = match args.get("item_id").and_then(|v| v.as_str()) {

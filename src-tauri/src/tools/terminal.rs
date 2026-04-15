@@ -68,9 +68,9 @@ impl TerminalTool {
                 if let Ok(custom_blocklist) = String::from_utf8(custom_blocklist_bytes) {
                     if let Ok(filters) = serde_json::from_str::<Vec<String>>(&custom_blocklist) {
                         dangerous_keywords.extend(
-                            filters
-                                .into_iter()
-                                .map(|s| (s.to_lowercase(), "custom blocklist pattern".to_string())),
+                            filters.into_iter().map(|s| {
+                                (s.to_lowercase(), "custom blocklist pattern".to_string())
+                            }),
                         );
                     }
                 }

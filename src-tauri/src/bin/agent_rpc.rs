@@ -66,7 +66,14 @@ async fn main() {
         if line.trim().is_empty() {
             continue;
         }
-        let response = handle_request(line, &base_dir, db.clone(), multi_agent.clone(), cancel_flag.clone()).await;
+        let response = handle_request(
+            line,
+            &base_dir,
+            db.clone(),
+            multi_agent.clone(),
+            cancel_flag.clone(),
+        )
+        .await;
         let _ = writeln!(
             stdout,
             "{}",

@@ -1,8 +1,8 @@
 pub mod duckduckgo;
 pub mod google;
 pub mod models;
-pub mod websurfx;
 pub mod tavily;
+pub mod websurfx;
 pub mod yahoo;
 
 use duckduckgo::scrape_duckduckgo;
@@ -10,12 +10,12 @@ use google::search_google;
 pub use models::SearchResultItem;
 use rand::seq::SliceRandom;
 use rquest_util::Emulation;
-use websurfx::search_websurfx;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
 use tavily::search_tavily;
 use tokio::time::sleep;
+use websurfx::search_websurfx;
 use yahoo::scrape_yahoo;
 
 pub struct SearchTool {
@@ -139,11 +139,9 @@ impl SearchTool {
             "elapsed_ms": elapsed_ms,
             "timestamp": chrono::Utc::now().to_rfc3339(),
         });
-        let _ = self.db.insert(
-            "metrics",
-            key.as_bytes(),
-            value.to_string().as_bytes(),
-        );
+        let _ = self
+            .db
+            .insert("metrics", key.as_bytes(), value.to_string().as_bytes());
     }
 
     fn rewrite_and_decompose_query(query: &str) -> Vec<String> {
@@ -209,10 +207,7 @@ impl SearchTool {
                         "success",
                         chrono::Utc::now().timestamp_millis() - search_started,
                     );
-                    log::info!(
-                        "Websurfx successfully returned {} results.",
-                        websurfx_len
-                    );
+                    log::info!("Websurfx successfully returned {} results.", websurfx_len);
                     return Ok(final_results);
                 } else {
                     self.record_metric(
@@ -270,7 +265,8 @@ impl SearchTool {
             let query_clone = q.clone();
             let tr_clone = time_range.map(|s| s.to_string());
             tasks.push(tokio::spawn(async move {
-                match scrape_duckduckgo(&client_clone, &query_clone, tr_clone.as_deref(), num).await {
+                match scrape_duckduckgo(&client_clone, &query_clone, tr_clone.as_deref(), num).await
+                {
                     Ok(ddg_results) => {
                         if ddg_results.is_empty() {
                             Err("DDG HTML: No organic results found.".to_string())
@@ -355,7 +351,8 @@ impl SearchTool {
     }
 
     fn enrich_scores(&self, query: &str, items: &mut [SearchResultItem]) {
-        let mut domain_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut domain_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
         for item in items.iter() {
             let domain = models::canonicalize_link(&item.link)
                 .split('/')
@@ -440,10 +437,7 @@ impl SearchTool {
                     .collect::<Vec<String>>()
                     .join("\n");
                 if let Some(source) = fallback_source {
-                    content = format!(
-                        "[search_query_fallback_used: {}]\n{}",
-                        source, content
-                    );
+                    content = format!("[search_query_fallback_used: {}]\n{}", source, content);
                 }
                 crate::agent::multi_agent::ToolResult {
                     tool_name: tool,

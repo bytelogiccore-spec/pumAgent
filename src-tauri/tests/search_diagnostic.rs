@@ -1,6 +1,5 @@
 use app_lib::config::AppConfig;
 use app_lib::tools::search::SearchTool;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn test_search_connectivity_diagnostic() {
@@ -20,13 +19,13 @@ async fn test_search_connectivity_diagnostic() {
     }
 
     let db_path = base_dir.join("search_test.dbx");
-    let db = Arc::new(dbx_core::Database::open(&db_path).expect("failed to open db"));
+    let db = dbx_core::Database::open(&db_path).expect("failed to open db");
     let search_tool = SearchTool::new(db, base_dir.clone());
 
     println!("--- Running Stress Test (10 consecutive queries) ---");
     for i in 1..=10 {
         let q = format!("news test query {}", i);
-        match search_tool.search(&q, None, 5).await {
+        match search_tool.search(&q, None, 5, None).await {
             Ok(results) => {
                 println!("[{}/10] SUCCESS: Found {} results.", i, results.len());
             }

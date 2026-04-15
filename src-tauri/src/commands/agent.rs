@@ -651,7 +651,11 @@ pub async fn set_extension_enabled(
     let mut config = AppConfig::load(&state.base_dir);
     if enabled {
         config.disabled_extensions.retain(|n| n != &extension_name);
-    } else if !config.disabled_extensions.iter().any(|n| n == &extension_name) {
+    } else if !config
+        .disabled_extensions
+        .iter()
+        .any(|n| n == &extension_name)
+    {
         config.disabled_extensions.push(extension_name);
     }
     config.save(&state.base_dir)?;
