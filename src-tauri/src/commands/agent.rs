@@ -8,6 +8,14 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
+fn generate_trace_id() -> String {
+    format!(
+        "trace-{}-{:04x}",
+        chrono::Utc::now().timestamp_millis(),
+        rand::random::<u16>()
+    )
+}
+
 #[derive(Deserialize)]
 pub struct RunPayload {
     endpoints: Vec<crate::config::LlmEndpoint>,
@@ -22,6 +30,7 @@ pub struct RunPayload {
     planner_prompt: Option<String>,
     critic_prompt: Option<String>,
     writer_prompt: Option<String>,
+    #[allow(dead_code)]
     reflector_prompt: Option<String>,
     max_loops: u32,
     use_multi_agent_workflow: bool,
@@ -43,6 +52,7 @@ pub async fn execute_agent_tools(
     state: State<'_, AgentState>,
     app: AppHandle,
 ) -> Result<OrchestratorResponse, String> {
+    let trace_id = generate_trace_id();
     // Create an isolated Tx/Rx channel for emitting logs continuously
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
 
@@ -59,7 +69,7 @@ pub async fn execute_agent_tools(
     let _ = tx
         .send(format!(
             "i18n:{}",
-            serde_json::json!({"key": "log.sys_endpoints_preparing", "args": {}})
+            serde_json::json!({"key": "log.sys_endpoints_preparing", "args": {"trace_id": trace_id}})
         ))
         .await;
 
@@ -93,10 +103,6 @@ pub async fn execute_agent_tools(
     // Inject Visualization capability
     actual_system_prompt.push_str("\n\n[VISUALIZATION DIRECTIVE]\nWhen explaining complex logic, relationships, architecture, or flows, you MUST use mermaid.js diagrams by wrapping them in ```mermaid blocks. Use Flowcharts, Sequence Diagrams, or State Diagrams where appropriate to drastically enhance readability.");
 
-    if !payload.use_think_mode {
-        actual_system_prompt.push_str("\n\n!! CRITICAL DIRECTIVE !!\nDO NOT OUTPUT ANY REASONING, THINKING, OR THOUGHT BLOCKS. DO NOT USE <think> OR SIMILAR TAGS. PROVIDE YOUR FINAL RESPONSE DIRECTLY AND IMMEDIATELY.");
-    }
-
     let mut actual_messages = payload.messages;
     if let Some(last_msg) = actual_messages.last_mut() {
         if last_msg.role == "user" {
@@ -128,9 +134,10 @@ pub async fn execute_agent_tools(
         }
     }
 
-    let (final_answer, history) = orchestrator
+    let (final_answer, _history) = orchestrator
         .run_loop(
             payload.session_id.clone(),
+            &trace_id,
             &actual_system_prompt,
             payload.planner_prompt.as_deref(),
             payload.critic_prompt.as_deref(),
@@ -139,6 +146,7 @@ pub async fn execute_agent_tools(
             &payload.language,
             payload.max_loops,
             payload.use_multi_agent_workflow,
+            payload.use_think_mode,
             payload.registry_prompt.as_deref(),
             tx.clone(),
             Arc::clone(&state.cancel_flag),
@@ -148,37 +156,9 @@ pub async fn execute_agent_tools(
     let _ = tx
         .send(format!(
             "i18n:{}",
-            serde_json::json!({"key": "log.sys_execution_ended", "args": {}})
+            serde_json::json!({"key": "log.sys_execution_ended", "args": {"trace_id": trace_id}})
         ))
         .await;
-
-    // Spawn Reflector Agent asynchronously if workflow is enabled
-    if payload.use_multi_agent_workflow {
-        if let Some(reflector_prompt) = payload.reflector_prompt {
-            let log_tx = tx.clone();
-            // Clone orchestrator state so it can be moved into the async block
-            let bg_routing = crate::agent::orchestrator::OrchestratorRouting {
-                endpoints: payload.endpoints.clone(),
-                planner_id: payload.planner_endpoint_id.clone(),
-                critic_id: payload.critic_endpoint_id.clone(),
-                writer_id: payload.writer_endpoint_id.clone(),
-                worker_id: payload.worker_endpoint_id.clone(),
-                reflector_id: payload.reflector_endpoint_id.clone(),
-                registry_id: payload.registry_endpoint_id.clone(),
-            };
-            let bg_orchestrator = Orchestrator::new(
-                bg_routing,
-                Arc::clone(&state.multi_agent),
-                state.base_dir.clone(),
-                state.db.clone(),
-            );
-            tokio::spawn(async move {
-                bg_orchestrator
-                    .run_reflector_pipeline(&reflector_prompt, history, log_tx)
-                    .await;
-            });
-        }
-    }
 
     Ok(OrchestratorResponse {
         final_output: final_answer,
@@ -266,10 +246,12 @@ pub async fn execute_background_scheduler(
     });
 
     tokio::spawn(async move {
+        let trace_id = generate_trace_id();
         let orchestrator = Orchestrator::new(bg_routing, multi_agent, base_dir, db);
         let _ = orchestrator
             .run_loop(
                 session_id,
+                &trace_id,
                 &worker.unwrap_or(sys),
                 planner.as_deref(),
                 critic.as_deref(),
@@ -278,6 +260,7 @@ pub async fn execute_background_scheduler(
                 &lang,
                 max_loops,
                 use_multi,
+                false, // background scheduler never uses think mode
                 registry.as_deref(),
                 tx,
                 cancel_flag,
@@ -645,4 +628,230 @@ pub async fn ai_summarize_item(
 #[tauri::command]
 pub fn get_next_execution_time(config: crate::agent::scheduler::ScheduleConfig) -> String {
     config.get_next_run_time(chrono::Utc::now())
+}
+
+#[tauri::command]
+pub async fn list_extensions(
+    state: State<'_, AgentState>,
+) -> Result<Vec<crate::agent::multi_agent::ExternalToolMetadata>, String> {
+    Ok(state.multi_agent.list_external_tools())
+}
+
+#[tauri::command]
+pub async fn reload_extensions(state: State<'_, AgentState>) -> Result<usize, String> {
+    state.multi_agent.refresh_external_tools()
+}
+
+#[tauri::command]
+pub async fn set_extension_enabled(
+    extension_name: String,
+    enabled: bool,
+    state: State<'_, AgentState>,
+) -> Result<(), String> {
+    let mut config = AppConfig::load(&state.base_dir);
+    if enabled {
+        config.disabled_extensions.retain(|n| n != &extension_name);
+    } else if !config.disabled_extensions.iter().any(|n| n == &extension_name) {
+        config.disabled_extensions.push(extension_name);
+    }
+    config.save(&state.base_dir)?;
+    state.multi_agent.refresh_external_tools()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_session_tree(
+    session_id: String,
+    state: State<'_, AgentState>,
+) -> Result<crate::state::SessionTree, String> {
+    let key = format!("session_tree:{}", session_id);
+    let bytes = state
+        .db
+        .get("sessions", key.as_bytes())
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Session tree not found".to_string())?;
+    serde_json::from_slice::<crate::state::SessionTree>(&bytes).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn fork_session_branch(
+    source_session_id: String,
+    from_node_id: Option<String>,
+    new_session_id: String,
+    state: State<'_, AgentState>,
+) -> Result<String, String> {
+    let source_key = format!("session_tree:{}", source_session_id);
+    let bytes = state
+        .db
+        .get("sessions", source_key.as_bytes())
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Source session tree not found".to_string())?;
+    let source_tree =
+        serde_json::from_slice::<crate::state::SessionTree>(&bytes).map_err(|e| e.to_string())?;
+
+    let target_node = from_node_id.or_else(|| source_tree.active_node_id.clone());
+    let mut keep = Vec::new();
+    for node in &source_tree.nodes {
+        keep.push(node.clone());
+        if Some(node.id.clone()) == target_node {
+            break;
+        }
+    }
+    if keep.is_empty() {
+        return Err("Cannot fork empty branch".to_string());
+    }
+
+    let mut parent: Option<String> = None;
+    let mut new_nodes = Vec::new();
+    for (idx, node) in keep.into_iter().enumerate() {
+        let id = format!("{}-{}", new_session_id, idx + 1);
+        let mut cloned = node.clone();
+        cloned.id = id.clone();
+        cloned.parent_id = parent.clone();
+        parent = Some(id);
+        new_nodes.push(cloned);
+    }
+
+    let forked = crate::state::SessionTree {
+        session_id: new_session_id.clone(),
+        forked_from_session_id: Some(source_session_id),
+        active_node_id: parent,
+        nodes: new_nodes,
+    };
+
+    let key = format!("session_tree:{}", new_session_id);
+    let json = serde_json::to_vec(&forked).map_err(|e| e.to_string())?;
+    state
+        .db
+        .insert("sessions", key.as_bytes(), &json)
+        .map_err(|e| e.to_string())?;
+    let _ = state.db.flush();
+    Ok(new_session_id)
+}
+
+#[tauri::command]
+pub fn resume_session_node(
+    session_id: String,
+    node_id: String,
+    state: State<'_, AgentState>,
+) -> Result<Vec<ChatMessage>, String> {
+    let key = format!("session_tree:{}", session_id);
+    let bytes = state
+        .db
+        .get("sessions", key.as_bytes())
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Session tree not found".to_string())?;
+    let tree =
+        serde_json::from_slice::<crate::state::SessionTree>(&bytes).map_err(|e| e.to_string())?;
+    let mut index = None;
+    for (idx, node) in tree.nodes.iter().enumerate() {
+        if node.id == node_id {
+            index = Some(idx);
+            break;
+        }
+    }
+    let idx = index.ok_or_else(|| "Session node not found".to_string())?;
+    let mut out = Vec::new();
+    for node in tree.nodes.into_iter().take(idx + 1) {
+        out.push(ChatMessage {
+            role: node.role,
+            content: node.content,
+            images_base64: None,
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn get_search_metrics(
+    limit: Option<usize>,
+    state: State<'_, AgentState>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let mut items = Vec::new();
+    let max = limit.unwrap_or(200);
+    let entries = state.db.scan("metrics").map_err(|e| e.to_string())?;
+    for (k, v) in entries {
+        let key = String::from_utf8_lossy(&k);
+        if !key.starts_with("search_metric:") {
+            continue;
+        }
+        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&v) {
+            items.push(json);
+        }
+    }
+    items.sort_by(|a, b| {
+        b.get("timestamp")
+            .and_then(|t| t.as_str())
+            .cmp(&a.get("timestamp").and_then(|t| t.as_str()))
+    });
+    items.truncate(max);
+    Ok(items)
+}
+
+#[tauri::command]
+pub fn get_provider_health(state: State<'_, AgentState>) -> Result<serde_json::Value, String> {
+    let entries = state.db.scan("metrics").map_err(|e| e.to_string())?;
+    let mut by_provider: std::collections::HashMap<String, (u32, u32, i64)> =
+        std::collections::HashMap::new();
+    for (k, v) in entries {
+        let key = String::from_utf8_lossy(&k);
+        if !key.starts_with("search_metric:") {
+            continue;
+        }
+        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&v) {
+            let provider = json
+                .get("provider")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let status = json.get("status").and_then(|s| s.as_str()).unwrap_or("");
+            let elapsed = json.get("elapsed_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+            let entry = by_provider.entry(provider).or_insert((0, 0, 0));
+            if status == "success" {
+                entry.0 += 1;
+            } else {
+                entry.1 += 1;
+            }
+            entry.2 += elapsed;
+        }
+    }
+
+    let mut out = serde_json::Map::new();
+    for (provider, (success, fail, elapsed_sum)) in by_provider {
+        let total = (success + fail).max(1);
+        let success_rate = success as f64 / total as f64;
+        let avg_latency = elapsed_sum as f64 / total as f64;
+        let score = (success_rate * 100.0) - (avg_latency / 1000.0).min(20.0);
+        out.insert(
+            provider,
+            serde_json::json!({
+                "success": success,
+                "fail": fail,
+                "avg_latency_ms": avg_latency,
+                "health_score": score.max(0.0),
+            }),
+        );
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
+#[tauri::command]
+pub fn run_prompt_tool_lint(state: State<'_, AgentState>) -> Result<Vec<String>, String> {
+    let config = AppConfig::load(&state.base_dir);
+    let mut prompts = Vec::new();
+    prompts.push(config.system_prompt);
+    if let Some(v) = config.planner_prompt {
+        prompts.push(v);
+    }
+    if let Some(v) = config.critic_prompt {
+        prompts.push(v);
+    }
+    if let Some(v) = config.writer_prompt {
+        prompts.push(v);
+    }
+    if let Some(v) = config.reflector_prompt {
+        prompts.push(v);
+    }
+    prompts.push(crate::agent::prompts::get_fallback_reflector_prompt().to_string());
+    Ok(state.multi_agent.lint_prompt_tool_alignment(&prompts))
 }

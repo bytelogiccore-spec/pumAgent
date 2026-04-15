@@ -53,6 +53,12 @@ pub async fn search_tavily(
                     link,
                     snippet: snippet.clone(),
                     recency_score: assign_recency_score(&snippet),
+                    source: "tavily".to_string(),
+                    query_used: query.to_string(),
+                    reliability_score: 0,
+                    query_match_score: 0,
+                    cross_check_score: 0,
+                    final_score: 0,
                 });
             }
         }

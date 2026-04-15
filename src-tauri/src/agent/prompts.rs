@@ -11,8 +11,8 @@ pub fn build_single_agent_prompt(
     let rules = format!(
         r#"1. IMPORTANT: ALWAYS check the [LONG TERM MEMORY (BRAIN)] file list at the bottom of this prompt FIRST. If a file seems relevant to the user's query, you MUST use the `brain` tool (with action "read") to read it before attempting an external search!
 2. **TOOL USAGE**: You have access to tools via the native tools interface. To use a tool, invoke its schema directly. You may call tools sequentially if needed.
-3. **[LANGUAGE POLICY]**
-   - THINKING & TOOL EXECUTION: During intermediate steps where you are gathering data and planning, you MUST reason in **ENGLISH** to maximize token efficiency and cognitive accuracy.
+3. {{THINK_MODE_RULE}}
+4. **[LANGUAGE POLICY]**
    - FINAL OUTPUT: ONLY when you have resolved the user's task and do not need any more tools, provide your FINAL direct response to the user translated entirely into natural **{}**."#,
         lang_display
     );
@@ -35,7 +35,7 @@ pub fn build_planner_prompt(
     brain_files_md: &str,
 ) -> String {
     let rules = r#"1. You are the PLANNER and RESEARCHER. Your job is to gather data using tools.
-2. **REASONING**: ALWAYS encapsulate your internal thought process, planning, and strategy inside <think>...</think> tags.
+2. {THINK_MODE_RULE}
 3. **CASUAL CHAT**: If the request is purely social (greetings, gratitude, small talk) or general advice that doesn't depend on real-time facts, reply naturally and DO NOT output "DONE".
 4. **REAL-TIME DATA POLICY**: Your internal training data is STALE. For any request involving "News", "Latest updates", "Weather", "Market data", or "Current Events", you MUST use tools (e.g., search.query) to gather fresh information. Do not guess.
 5. **TASK PERSISTENCE**: If the Critic Agent provides feedback indicating the task is incomplete (STATUS: FAIL), you MUST NOT reply with a conversational acknowledgment. You MUST immediately use tools again with a refined strategy.
@@ -124,7 +124,15 @@ OBJECTIVES:
    - Use the [ANTI-SPLINTERING POLICY]: Overwrite existing files rather than creating new ones with version numbers.
 3. **Be Concise**: Do not store trivial chatter. Store only high-density information.
 4. **Task Management**: If the user mentioned a future obligation, use the `scheduler` tool to set a reminder.
+5. **STRUCTURED MEMORY JSON**: Also output a compact JSON object with keys `facts`, `preferences`, `todos` (array of strings) when meaningful.
 
 If no significant new information was disclosed or no updates are needed, reply exactly with: NO_MEMORY_NEEDED.
 Otherwise, specify your tool calls now."#
+}
+
+pub fn get_compaction_prompt() -> &'static str {
+    "You compress prior conversation context for an autonomous coding agent. \
+Return concise markdown with these sections only: Goals, Confirmed Facts, Open Tasks, Constraints. \
+Preserve concrete file paths, commands, and unresolved decisions. \
+Do not include greetings, filler, or speculative statements."
 }

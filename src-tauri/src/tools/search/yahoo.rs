@@ -1,6 +1,6 @@
+use super::SearchResultItem;
 use scraper::{Html, Selector};
 use std::error::Error;
-use super::SearchResultItem;
 
 pub async fn scrape_yahoo(
     client: &rquest::Client,
@@ -8,7 +8,11 @@ pub async fn scrape_yahoo(
     time_range: Option<&str>,
     num: u32,
 ) -> Result<Vec<SearchResultItem>, Box<dyn Error + Send + Sync>> {
-    let mut url = format!("https://search.yahoo.com/search?p={}&n={}", urlencoding::encode(query), num + 5);
+    let mut url = format!(
+        "https://search.yahoo.com/search?p={}&n={}",
+        urlencoding::encode(query),
+        num + 5
+    );
 
     // time_range handling a la DDG/Google if needed...
     if let Some(tr) = time_range {
@@ -20,7 +24,7 @@ pub async fn scrape_yahoo(
             _ => "",
         };
         if !age.is_empty() {
-             url.push_str(&format!("&age={}", age));
+            url.push_str(&format!("&age={}", age));
         }
     }
 
@@ -28,7 +32,10 @@ pub async fn scrape_yahoo(
         .get(&url)
         .header("Referer", "https://search.yahoo.com/")
         .header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        )
         .send()
         .await?;
 
@@ -40,7 +47,7 @@ pub async fn scrape_yahoo(
     }
 
     let document = Html::parse_document(&text);
-    
+
     // Yahoo commonly uses div.algo or div.compTitle for organic search results
     // We will target combinations that are known to work:
     let container_selector = Selector::parse("div.algo, div.algo-sr, div.Ovh\\(h\\)").unwrap();
@@ -67,19 +74,26 @@ pub async fn scrape_yahoo(
                 let mut actual_link = href.to_string();
                 if let Some(ru_idx) = actual_link.find("/RU=") {
                     if let Some(rk_idx) = actual_link[ru_idx..].find("/RK=") {
-                        if let Ok(decoded) = urlencoding::decode(&actual_link[ru_idx + 4..ru_idx + rk_idx]) {
-                             actual_link = decoded.to_string();
+                        if let Ok(decoded) =
+                            urlencoding::decode(&actual_link[ru_idx + 4..ru_idx + rk_idx])
+                        {
+                            actual_link = decoded.to_string();
                         }
                     } else if let Ok(decoded) = urlencoding::decode(&actual_link[ru_idx + 4..]) {
-                         actual_link = decoded.to_string();
+                        actual_link = decoded.to_string();
                     }
                 }
                 actual_link
-            },
+            }
             None => continue,
         };
 
-        let title: String = a_elem.text().collect::<Vec<_>>().join(" ").trim().to_string();
+        let title: String = a_elem
+            .text()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string();
         if title.is_empty() {
             continue;
         }
@@ -94,6 +108,12 @@ pub async fn scrape_yahoo(
             link,
             snippet: snippet.clone(),
             recency_score: 0,
+            source: "yahoo".to_string(),
+            query_used: query.to_string(),
+            reliability_score: 0,
+            query_match_score: 0,
+            cross_check_score: 0,
+            final_score: 0,
         };
         item.recency_score = crate::tools::search::models::assign_recency_score(&snippet);
         items.push(item);

@@ -1,97 +1,124 @@
+use super::models::SearchResultItem;
 use serde::Deserialize;
 use std::error::Error;
-use super::models::SearchResultItem;
-use rand::seq::SliceRandom;
 use tokio::time::{sleep, Duration};
 
-const SEARXNG_INSTANCES: &[&str] = &[
-    "https://searx.be/",
-    "https://searx.tiekoetter.com/",
-    "https://priv.au/",
-    "https://etsi.me/",
-    "https://baresearch.org/",
-    "https://searx.perennialte.ch/",
-];
-
 #[derive(Deserialize, Debug)]
-struct SearxngResponse {
-    results: Vec<SearxngResult>,
+#[serde(rename_all = "camelCase")]
+struct WebsurfxResponse {
+    results: Vec<WebsurfxResult>,
 }
 
 #[derive(Deserialize, Debug)]
-struct SearxngResult {
-    title: String,
-    url: String,
-    content: Option<String>,
+#[serde(rename_all = "camelCase")]
+struct WebsurfxResult {
+    title: Option<String>,
+    url: Option<String>,
+    description: Option<String>,
 }
 
 pub async fn search_searxng(
     client: &rquest::Client,
     query: &str,
-    time_range: Option<&str>,
+    _time_range: Option<&str>, // Websurfx might not officially support time ranges via API yet
     num: u32,
 ) -> Result<Vec<SearchResultItem>, Box<dyn Error + Send + Sync>> {
-    let mut instances: Vec<&str> = SEARXNG_INSTANCES.to_vec();
-    {
-        let mut rng = rand::thread_rng();
-        instances.shuffle(&mut rng);
-    }
-
+    let local_instance = "http://127.0.0.1:8080";
     let max_retries = 3;
     let mut last_error = String::new();
 
-    for instance in instances.iter().take(max_retries) {
-        let mut url = format!("{}/search?q={}&format=json", instance, urlencoding::encode(query));
-        
-        if let Some(tr) = time_range {
-            let tr_val = match tr {
-                "d" | "w" | "m" | "y" => tr,
-                _ => "",
-            };
-            if !tr_val.is_empty() {
-                url.push_str(&format!("&time_range={}", tr_val)); // SearXNG param
-            }
-        }
+    for attempt in 0..max_retries {
+        // Websurfx uses &json=true directly in query string
+        let url = format!(
+            "{}/search?q={}&json=true",
+            local_instance,
+            urlencoding::encode(query)
+        );
 
+        log::info!(
+            "Websurfx local API polling (attempt {}): {}",
+            attempt + 1,
+            url
+        );
         let resp = client.get(&url).send().await;
-        
+
         match resp {
             Ok(response) => {
                 if !response.status().is_success() {
                     last_error = format!("Status: {}", response.status());
-                    continue;
-                }
-                
-                let text = response.text().await.unwrap_or_default();
-                if let Ok(json) = serde_json::from_str::<SearxngResponse>(&text) {
-                    let mut items = Vec::new();
-                    for (i, r) in json.results.into_iter().enumerate() {
-                        if i as u32 >= num { break; }
-                        let snippet = r.content.unwrap_or_default();
-                        let mut item = SearchResultItem {
-                            title: r.title,
-                            link: r.url,
-                            snippet: snippet.clone(),
-                            recency_score: 0,
-                        };
-                        item.recency_score = crate::tools::search::models::assign_recency_score(&snippet);
-                        items.push(item);
-                    }
-                    if !items.is_empty() {
-                        return Ok(items);
-                    } else {
-                        last_error = "Valid JSON but no organic results".to_string();
-                    }
+                    log::warn!("Websurfx local instance failed: {}", last_error);
                 } else {
-                    last_error = "Invalid JSON response".to_string();
+                    let text = response.text().await.unwrap_or_default();
+                    match serde_json::from_str::<WebsurfxResponse>(&text) {
+                        Ok(parsed) => {
+                            let mut items = Vec::new();
+                            for result in parsed.results.into_iter().take(num as usize) {
+                                let title = result.title.unwrap_or_default();
+                                let link = result.url.unwrap_or_default();
+                                let mut snippet = result.description.unwrap_or_default();
+
+                                // Clean out HTML tags from snippet and title if present
+                                snippet = snippet
+                                    .replace("<span class=\"searchmatch\">", "")
+                                    .replace("</span>", "")
+                                    .replace("<b>", "")
+                                    .replace("</b>", "");
+                                let title = title
+                                    .replace("<span class=\"searchmatch\">", "")
+                                    .replace("</span>", "")
+                                    .replace("<b>", "")
+                                    .replace("</b>", "");
+
+                                if title.is_empty() || link.is_empty() {
+                                    continue;
+                                }
+
+                                let mut item = SearchResultItem {
+                                    title,
+                                    link,
+                                    snippet: snippet.clone(),
+                                    recency_score: 0,
+                                    source: "searxng".to_string(),
+                                    query_used: query.to_string(),
+                                    reliability_score: 0,
+                                    query_match_score: 0,
+                                    cross_check_score: 0,
+                                    final_score: 0,
+                                };
+                                item.recency_score =
+                                    crate::tools::search::models::assign_recency_score(&snippet);
+                                items.push(item);
+                            }
+
+                            if !items.is_empty() {
+                                return Ok(items);
+                            } else {
+                                last_error =
+                                    "Websurfx API loaded but no valid results found in JSON"
+                                        .to_string();
+                            }
+                        }
+                        Err(e) => {
+                            last_error = format!("Failed to parse Websurfx JSON response: {}", e);
+                            log::error!(
+                                "Websurfx parsing error: {}. Raw response excerpt: {:.200}",
+                                e,
+                                text
+                            );
+                        }
+                    }
                 }
-            },
+            }
             Err(e) => {
                 last_error = e.to_string();
             }
         }
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(1500)).await;
     }
-    
-    Err(format!("SearXNG public instances failed after {} retries. Last error: {}", max_retries, last_error).into())
+
+    Err(format!(
+        "Websurfx local instance failed after {} retries. Last error: {}",
+        max_retries, last_error
+    )
+    .into())
 }

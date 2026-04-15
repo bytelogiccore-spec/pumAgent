@@ -1,10 +1,14 @@
+pub mod duckduckgo;
 pub mod google;
 pub mod models;
 pub mod searxng;
 pub mod tavily;
+pub mod yahoo;
 
+use duckduckgo::scrape_duckduckgo;
 use google::search_google;
 pub use models::SearchResultItem;
+use rand::seq::SliceRandom;
 use rquest_util::Emulation;
 use searxng::search_searxng;
 use std::error::Error;
@@ -12,7 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tavily::search_tavily;
 use tokio::time::sleep;
-use rand::seq::SliceRandom;
+use yahoo::scrape_yahoo;
 
 pub struct SearchTool {
     db: Arc<dbx_core::Database>,
@@ -21,14 +25,11 @@ pub struct SearchTool {
 
 impl SearchTool {
     pub fn new(db: Arc<dbx_core::Database>, base_dir: std::path::PathBuf) -> Self {
-        SearchTool {
-            db,
-            base_dir,
-        }
+        SearchTool { db, base_dir }
     }
 
     fn get_spoofed_client() -> Result<rquest::Client, Box<dyn Error + Send + Sync>> {
-        let emulations = vec![
+        let emulations = [
             Emulation::Chrome120,
             Emulation::Chrome124,
             Emulation::Chrome127,
@@ -63,11 +64,60 @@ impl SearchTool {
         }
 
         let next_ts = now + wait_time;
-        let _ = self.db.insert("agent_state", last_req_key, next_ts.to_string().as_bytes());
+        let _ = self
+            .db
+            .insert("agent_state", last_req_key, next_ts.to_string().as_bytes());
 
         if wait_time > 0 {
             sleep(Duration::from_millis(wait_time as u64)).await;
         }
+    }
+
+    fn record_metric(&self, trace_id: &str, provider: &str, status: &str, elapsed_ms: i64) {
+        let key = format!(
+            "search_metric:{}:{}:{}",
+            chrono::Utc::now().timestamp_millis(),
+            provider,
+            status
+        );
+        let value = serde_json::json!({
+            "trace_id": trace_id,
+            "provider": provider,
+            "status": status,
+            "elapsed_ms": elapsed_ms,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+        let _ = self.db.insert(
+            "metrics",
+            key.as_bytes(),
+            value.to_string().as_bytes(),
+        );
+    }
+
+    fn rewrite_and_decompose_query(query: &str) -> Vec<String> {
+        let mut queries = vec![query.trim().to_string()];
+        let normalized = query
+            .replace("latest", "recent")
+            .replace("news", "updates")
+            .replace("please", "")
+            .trim()
+            .to_string();
+        if !normalized.is_empty() && normalized != query {
+            queries.push(normalized);
+        }
+        for split_key in [" and ", ",", " then "] {
+            if query.to_lowercase().contains(split_key) {
+                for part in query.split(split_key) {
+                    let p = part.trim();
+                    if p.len() > 3 {
+                        queries.push(p.to_string());
+                    }
+                }
+            }
+        }
+        queries.sort();
+        queries.dedup();
+        queries
     }
 
     pub async fn search(
@@ -75,60 +125,129 @@ impl SearchTool {
         query: &str,
         time_range: Option<&str>,
         num: u32,
+        trace_id: Option<&str>,
     ) -> Result<Vec<SearchResultItem>, Box<dyn Error + Send + Sync>> {
+        let trace_id = trace_id.unwrap_or("trace-unknown");
+        let search_started = chrono::Utc::now().timestamp_millis();
         self.rate_limit().await; // Global IP Rate Limit / Token Bucket protection
 
         let config = crate::AppConfig::load(&self.base_dir);
         let client = Self::get_spoofed_client()?;
 
         let mut tasks = vec![];
+        let mut errors = vec![];
+        let query_variants = Self::rewrite_and_decompose_query(query);
+        let primary_query = query_variants
+            .first()
+            .cloned()
+            .unwrap_or_else(|| query.to_string());
 
-        // 1. Tavily Task
-        if !config.tavily_api_key.is_empty() {
-            let client_clone = client.clone();
-            let query_clone = query.to_string();
-            let api_key = config.tavily_api_key.clone();
-            tasks.push(tokio::spawn(async move {
-                match search_tavily(&client_clone, &query_clone, &api_key).await {
-                    Ok(res) => Ok(res),
-                    Err(e) => Err(format!("Tavily: {}", e)),
+        // 1. Primary Engine: SearXNG (Websurfx Local Sidecar)
+        let tr_clone_searxng = time_range.map(|s| s.to_string());
+        log::info!("Searching via Primary Engine (Websurfx Local Sidecar)...");
+        match search_searxng(&client, &primary_query, tr_clone_searxng.as_deref(), num).await {
+            Ok(searxng_results) => {
+                if !searxng_results.is_empty() {
+                    let searxng_len = searxng_results.len();
+                    let mut final_results = searxng_results;
+                    self.enrich_scores(&primary_query, &mut final_results);
+                    self.record_metric(
+                        trace_id,
+                        "searxng",
+                        "success",
+                        chrono::Utc::now().timestamp_millis() - search_started,
+                    );
+                    log::info!(
+                        "Websurfx successfully returned {} results.",
+                        searxng_len
+                    );
+                    return Ok(final_results);
+                } else {
+                    self.record_metric(
+                        trace_id,
+                        "searxng",
+                        "empty",
+                        chrono::Utc::now().timestamp_millis() - search_started,
+                    );
+                    errors.push("SearXNG (Websurfx): No organic results found.".to_string());
                 }
-            }));
-        }
-
-        // 2. Google Task
-        if !config.google_api_key.is_empty() && !config.google_cx.is_empty() {
-            let client_clone = client.clone();
-            let query_clone = query.to_string();
-            let api_key = config.google_api_key.clone();
-            let cx = config.google_cx.clone();
-            tasks.push(tokio::spawn(async move {
-                match search_google(&client_clone, &query_clone, &api_key, &cx).await {
-                    Ok(res) => Ok(res),
-                    Err(e) => Err(format!("Google: {}", e)),
-                }
-            }));
-        }
-
-        // 3. SearXNG Aggregator Task
-        let client_clone = client.clone();
-        let query_clone = query.to_string();
-        let tr_clone = time_range.map(|s| s.to_string());
-        tasks.push(tokio::spawn(async move {
-            match search_searxng(&client_clone, &query_clone, tr_clone.as_deref(), num).await {
-                Ok(searxng_results) => {
-                    if searxng_results.is_empty() {
-                        Err("SearXNG: No organic results found.".to_string())
-                    } else {
-                        Ok(searxng_results)
-                    }
-                },
-                Err(e) => Err(format!("SearXNG: {}", e)),
             }
-        }));
+            Err(e) => {
+                self.record_metric(
+                    trace_id,
+                    "searxng",
+                    "error",
+                    chrono::Utc::now().timestamp_millis() - search_started,
+                );
+                let err_msg = format!("SearXNG (Websurfx): {}", e);
+                log::warn!("{}", err_msg);
+                errors.push(err_msg);
+            }
+        }
+
+        log::warn!("Primary Engine (Websurfx) failed or returned no results. Falling back to external aggregators...");
+
+        // Fallbacks: Tavily
+        for q in query_variants {
+            if !config.tavily_api_key.is_empty() {
+                let client_clone = client.clone();
+                let query_clone = q.clone();
+                let api_key = config.tavily_api_key.clone();
+                tasks.push(tokio::spawn(async move {
+                    match search_tavily(&client_clone, &query_clone, &api_key).await {
+                        Ok(res) => Ok(res),
+                        Err(e) => Err(format!("Tavily: {}", e)),
+                    }
+                }));
+            }
+
+            if !config.google_api_key.is_empty() && !config.google_cx.is_empty() {
+                let client_clone = client.clone();
+                let query_clone = q.clone();
+                let api_key = config.google_api_key.clone();
+                let cx = config.google_cx.clone();
+                tasks.push(tokio::spawn(async move {
+                    match search_google(&client_clone, &query_clone, &api_key, &cx).await {
+                        Ok(res) => Ok(res),
+                        Err(e) => Err(format!("Google: {}", e)),
+                    }
+                }));
+            }
+
+            let client_clone = client.clone();
+            let query_clone = q.clone();
+            let tr_clone = time_range.map(|s| s.to_string());
+            tasks.push(tokio::spawn(async move {
+                match scrape_duckduckgo(&client_clone, &query_clone, tr_clone.as_deref(), num).await {
+                    Ok(ddg_results) => {
+                        if ddg_results.is_empty() {
+                            Err("DDG HTML: No organic results found.".to_string())
+                        } else {
+                            Ok(ddg_results)
+                        }
+                    }
+                    Err(e) => Err(format!("DDG HTML: {}", e)),
+                }
+            }));
+
+            let client_clone3 = client.clone();
+            let query_clone3 = q.clone();
+            let tr_clone3 = time_range.map(|s| s.to_string());
+            tasks.push(tokio::spawn(async move {
+                match scrape_yahoo(&client_clone3, &query_clone3, tr_clone3.as_deref(), num).await {
+                    Ok(yahoo_results) => {
+                        if yahoo_results.is_empty() {
+                            Err("Yahoo: No organic results found.".to_string())
+                        } else {
+                            Ok(yahoo_results)
+                        }
+                    }
+                    Err(e) => Err(format!("Yahoo: {}", e)),
+                }
+            }));
+        }
 
         let mut results = vec![];
-        let mut errors = vec![];
 
         let completed_tasks = futures::future::join_all(tasks).await;
         for task_res in completed_tasks {
@@ -150,6 +269,12 @@ impl SearchTool {
             } else {
                 errors.join(" | ")
             };
+            self.record_metric(
+                trace_id,
+                "fallback",
+                "failed",
+                chrono::Utc::now().timestamp_millis() - search_started,
+            );
             return Err(format!("Search failed or blocked. Details: {}", combined_errors).into());
         }
 
@@ -157,17 +282,52 @@ impl SearchTool {
         let mut unique_links = std::collections::HashSet::new();
         let mut filtered_results = Vec::new();
         for item in results {
-            if unique_links.insert(item.link.clone()) {
+            let canonical = models::canonicalize_link(&item.link);
+            if unique_links.insert(canonical) {
                 filtered_results.push(item);
             }
         }
 
-        // Sort dynamically by recency score (Descending: High score first)
-        filtered_results.sort_by(|a, b| b.recency_score.cmp(&a.recency_score));
+        self.enrich_scores(query, &mut filtered_results);
+        filtered_results.sort_by(|a, b| b.final_score.cmp(&a.final_score));
 
         // Filter and return Top N
         filtered_results.truncate(num as usize);
+        self.record_metric(
+            trace_id,
+            "fallback",
+            "success",
+            chrono::Utc::now().timestamp_millis() - search_started,
+        );
         Ok(filtered_results)
+    }
+
+    fn enrich_scores(&self, query: &str, items: &mut [SearchResultItem]) {
+        let mut domain_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        for item in items.iter() {
+            let domain = models::canonicalize_link(&item.link)
+                .split('/')
+                .nth(2)
+                .unwrap_or("unknown")
+                .to_string();
+            *domain_counts.entry(domain).or_insert(0) += 1;
+        }
+        for item in items.iter_mut() {
+            item.reliability_score = models::source_reliability_score(&item.link);
+            item.query_match_score =
+                models::query_match_score(query, &format!("{} {}", item.title, item.snippet));
+            let domain = models::canonicalize_link(&item.link)
+                .split('/')
+                .nth(2)
+                .unwrap_or("unknown")
+                .to_string();
+            let domain_support = domain_counts.get(&domain).copied().unwrap_or(1);
+            item.cross_check_score = domain_support.saturating_mul(15).min(100);
+            item.final_score = item.recency_score
+                + item.reliability_score
+                + item.query_match_score
+                + item.cross_check_score;
+        }
     }
 
     pub async fn execute_action(
@@ -177,16 +337,41 @@ impl SearchTool {
         args: serde_json::Value,
     ) -> crate::agent::multi_agent::ToolResult {
         if action == "query" {
-            let query = args.get("query").and_then(|q| q.as_str()).unwrap_or("");
+            let query = if let Some(q) = args.get("query").and_then(|v| v.as_str()) {
+                q.to_string()
+            } else if let Some(s) = args.as_str() {
+                s.to_string()
+            } else {
+                "".to_string()
+            };
+
+            if query.trim().is_empty() {
+                return crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action,
+                    ok: false,
+                    output: "Search error: query cannot be empty".into(),
+                };
+            }
+
             let time_range = args.get("time_range").and_then(|t| t.as_str());
-            match self.search(query, time_range, 5).await {
+            let trace_id = args.get("trace_id").and_then(|t| t.as_str());
+            match self.search(&query, time_range, 5, trace_id).await {
                 Ok(items) => {
                     let content = items
                         .into_iter()
                         .map(|item| {
                             format!(
-                                "Title: {}\nLink: {}\nSnippet: {}\n---",
-                                item.title, item.link, item.snippet
+                                "Title: {}\nLink: {}\nSnippet: {}\nSource: {}\nScore: {}\nBreakdown(recency/reliability/match/cross): {}/{}/{}/{}\n---",
+                                item.title,
+                                item.link,
+                                item.snippet,
+                                item.source,
+                                item.final_score,
+                                item.recency_score,
+                                item.reliability_score,
+                                item.query_match_score,
+                                item.cross_check_score
                             )
                         })
                         .collect::<Vec<String>>()

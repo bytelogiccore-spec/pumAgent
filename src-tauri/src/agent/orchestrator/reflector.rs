@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 impl super::Orchestrator {
     pub async fn run_reflector_pipeline(
         &self,
+        trace_id: &str,
         reflector_prompt: &str,
         mut history: Vec<ChatMessage>,
         log_tx: mpsc::Sender<String>,
@@ -64,6 +65,7 @@ impl super::Orchestrator {
         }
 
         let tool_calls = extract_json_blocks(&ai_text);
+        self.persist_structured_memory(&ai_text).await;
         if tool_calls.is_empty() {
             let _ = log_tx
                 .send(format!(
@@ -80,7 +82,12 @@ impl super::Orchestrator {
 
         let results = self
             .multi_agent
-            .execute_tools(tool_calls, Some(self.get_llm_for_worker()), None)
+            .execute_tools(
+                tool_calls,
+                Some(self.get_llm_for_worker()),
+                None,
+                Some(trace_id.to_string()),
+            )
             .await;
 
         for r in results {
@@ -101,5 +108,52 @@ impl super::Orchestrator {
                 serde_json::json!({"key": "log.reflector_done", "args": {}})
             ))
             .await;
+    }
+
+    async fn persist_structured_memory(&self, ai_text: &str) {
+        let parsed = if let Ok(v) = serde_json::from_str::<serde_json::Value>(ai_text) {
+            Some(v)
+        } else {
+            let fenced = ai_text
+                .trim()
+                .trim_start_matches("```json")
+                .trim_start_matches("```")
+                .trim_end_matches("```")
+                .trim();
+            serde_json::from_str::<serde_json::Value>(fenced).ok()
+        };
+        if let Some(v) = parsed {
+            let facts = v
+                .get("facts")
+                .and_then(|x| x.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
+            let preferences = v
+                .get("preferences")
+                .and_then(|x| x.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
+            let todos = v
+                .get("todos")
+                .and_then(|x| x.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
+            if !facts.is_empty() || !preferences.is_empty() || !todos.is_empty() {
+                let brain = crate::tools::brain::BrainTool::new(self.db.clone());
+                let _ = brain.upsert_structured_memory(&facts, &preferences, &todos);
+            }
+        }
     }
 }

@@ -9,6 +9,10 @@ fn default_language() -> String {
     "en".to_string()
 }
 
+fn default_pumai_base_url() -> String {
+    "http://127.0.0.1:8080".to_string()
+}
+
 fn default_is_first_run() -> bool {
     true
 }
@@ -23,6 +27,18 @@ fn default_rules_limit() -> u32 {
 
 fn default_skills_limit() -> u32 {
     8000
+}
+
+fn default_extension_search_paths() -> Vec<String> {
+    vec!["extensions".to_string()]
+}
+
+fn default_compaction_trigger_ratio() -> f32 {
+    0.8
+}
+
+fn default_compaction_keep_recent() -> usize {
+    12
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -124,10 +140,29 @@ pub struct AppConfig {
     #[serde(default)]
     pub telegram_chat_id: String,
 
+    #[serde(default = "default_pumai_base_url")]
+    pub pumai_base_url: String,
+    #[serde(default)]
+    pub pumai_api_key: String,
+
     #[serde(default = "default_rules_limit")]
     pub kb_rules_token_limit: u32,
     #[serde(default = "default_skills_limit")]
     pub kb_skills_token_limit: u32,
+
+    #[serde(default)]
+    pub enabled_extension_packages: Vec<String>,
+    #[serde(default)]
+    pub disabled_extensions: Vec<String>,
+    #[serde(default = "default_extension_search_paths")]
+    pub extension_search_paths: Vec<String>,
+
+    #[serde(default = "default_true")]
+    pub compaction_enabled: bool,
+    #[serde(default = "default_compaction_trigger_ratio")]
+    pub compaction_trigger_ratio: f32,
+    #[serde(default = "default_compaction_keep_recent")]
+    pub compaction_keep_recent: usize,
 }
 
 impl AppConfig {
@@ -270,8 +305,16 @@ impl AppConfig {
             telegram_enabled: false,
             telegram_bot_token: "".to_string(),
             telegram_chat_id: "".to_string(),
+            pumai_base_url: default_pumai_base_url(),
+            pumai_api_key: "".to_string(),
             kb_rules_token_limit: default_rules_limit(),
             kb_skills_token_limit: default_skills_limit(),
+            enabled_extension_packages: Vec::new(),
+            disabled_extensions: Vec::new(),
+            extension_search_paths: default_extension_search_paths(),
+            compaction_enabled: true,
+            compaction_trigger_ratio: default_compaction_trigger_ratio(),
+            compaction_keep_recent: default_compaction_keep_recent(),
         }
     }
 }

@@ -28,32 +28,38 @@ impl TerminalTool {
         }
     }
 
-    pub fn is_dangerous(&self, cmd_string: &str) -> bool {
+    pub fn analyze_risk(&self, cmd_string: &str) -> Option<String> {
         let lower = cmd_string.to_lowercase();
+        let compact: String = lower.chars().filter(|c| !c.is_whitespace()).collect();
 
-        let mut dangerous_keywords: Vec<String> = if cfg!(target_os = "windows") {
+        let mut dangerous_keywords: Vec<(String, String)> = if cfg!(target_os = "windows") {
             vec![
-                "format ".into(),
-                "diskpart".into(),
-                "remove-item c:\\".into(),
-                "rmdir c:\\".into(),
-                "del c:\\".into(),
-                "rd /s /q c:\\".into(),
-                "stop-process".into(),
-                "vssadmin".into(),
-                "wevtutil cx".into(),
-                "wmic".into(),
+                ("format".into(), "disk format command".into()),
+                ("diskpart".into(), "disk partition tool".into()),
+                ("remove-item".into(), "deletion command".into()),
+                ("rmdir".into(), "directory deletion".into()),
+                ("del".into(), "file deletion".into()),
+                ("rd/s/q".into(), "recursive forced delete".into()),
+                ("stop-process".into(), "process termination".into()),
+                ("vssadmin".into(), "shadow copy manipulation".into()),
+                ("wevtutilcl".into(), "event log clear".into()),
+                ("wmic".into(), "system management command".into()),
+                ("invoke-webrequest".into(), "network download".into()),
+                ("curl".into(), "network download".into()),
+                ("wget".into(), "network download".into()),
             ]
         } else {
             vec![
-                "rm -rf /".into(),
-                "mkfs".into(),
-                "dd if=".into(),
-                "shutdown".into(),
-                "reboot".into(),
-                "sudo ".into(),
-                "chmod -r".into(),
-                "chown -r".into(),
+                ("rm-rf/".into(), "root-level destructive delete".into()),
+                ("mkfs".into(), "filesystem format".into()),
+                ("ddif=".into(), "raw disk write command".into()),
+                ("shutdown".into(), "system shutdown".into()),
+                ("reboot".into(), "system reboot".into()),
+                ("sudo".into(), "privilege escalation".into()),
+                ("chmod-r".into(), "recursive permission change".into()),
+                ("chown-r".into(), "recursive ownership change".into()),
+                ("curl".into(), "network download".into()),
+                ("wget".into(), "network download".into()),
             ]
         };
 
@@ -61,18 +67,27 @@ impl TerminalTool {
             if let Ok(Some(custom_blocklist_bytes)) = db.get("config", b"terminal_blocklist") {
                 if let Ok(custom_blocklist) = String::from_utf8(custom_blocklist_bytes) {
                     if let Ok(filters) = serde_json::from_str::<Vec<String>>(&custom_blocklist) {
-                        dangerous_keywords.extend(filters.into_iter().map(|s| s.to_lowercase()));
+                        dangerous_keywords.extend(
+                            filters
+                                .into_iter()
+                                .map(|s| (s.to_lowercase(), "custom blocklist pattern".to_string())),
+                        );
                     }
                 }
             }
         }
 
-        for kw in dangerous_keywords {
-            if lower.contains(&kw) {
-                return true;
+        for (kw, reason) in dangerous_keywords {
+            let key = kw.replace(' ', "");
+            if lower.contains(&kw) || compact.contains(&key) {
+                return Some(reason);
             }
         }
-        false
+        None
+    }
+
+    pub fn is_dangerous(&self, cmd_string: &str) -> bool {
+        self.analyze_risk(cmd_string).is_some()
     }
 
     pub fn execute(&self, cmd_string: &str) -> Result<String, String> {
@@ -158,5 +173,23 @@ impl TerminalTool {
                 output: "Unsupported action for terminal".into(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_compact_obfuscated_delete_pattern() {
+        let tool = TerminalTool::new(std::env::temp_dir(), None);
+        let reason = tool.analyze_risk("r d   / s / q  c:\\");
+        assert!(reason.is_some());
+    }
+
+    #[test]
+    fn allows_simple_safe_command() {
+        let tool = TerminalTool::new(std::env::temp_dir(), None);
+        assert!(!tool.is_dangerous("echo hello"));
     }
 }

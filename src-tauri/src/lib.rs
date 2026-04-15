@@ -73,6 +73,44 @@ pub fn run() {
             if !base_dir.exists() {
                 let _ = fs::create_dir_all(&base_dir);
             }
+            let extensions_dir = base_dir.join("extensions");
+            if !extensions_dir.exists() {
+                let _ = fs::create_dir_all(&extensions_dir);
+            }
+            let sample_extension = extensions_dir.join("sample_echo_extension.json");
+            if !sample_extension.exists() {
+                let sample = serde_json::json!({
+                    "name": "sample_echo_extension",
+                    "description": "Sample external extension tool for validating extension registry wiring.",
+                    "actions": ["invoke"],
+                    "kind": "echo",
+                    "static_response": "sample_echo_extension executed successfully."
+                });
+                let _ = fs::write(&sample_extension, sample.to_string());
+            }
+
+            // [WEBSURFX] Copy assets to base_dir/websurfx_assets to ensure working directory safety
+            let websurfx_assets_target = base_dir.join("websurfx_assets");
+            if !websurfx_assets_target.exists() {
+                if let Ok(res_dir) = app.path().resource_dir() {
+                    let source_assets = res_dir.join("websurfx_assets");
+                    if source_assets.exists() {
+                        // Basic recursive copy (simplified for core components)
+                        let _ = fs::create_dir_all(websurfx_assets_target.join("websurfx"));
+                        let _ = fs::create_dir_all(websurfx_assets_target.join("public"));
+                        let _ = fs::copy(
+                            source_assets.join("websurfx").join("config.lua"),
+                            websurfx_assets_target.join("websurfx").join("config.lua"),
+                        );
+                    }
+                }
+            }
+            if std::env::set_current_dir(&websurfx_assets_target).is_err() {
+                // If the target doesn't exist, we just run in current dir and hope for the best
+                if let Ok(res_dir) = app.path().resource_dir() {
+                    let _ = std::env::set_current_dir(res_dir.join("websurfx_assets"));
+                }
+            }
 
             // Initialize DBX Core
             let db_path = base_dir.join("pumagent_store.dbx");
@@ -124,8 +162,7 @@ pub fn run() {
             // ---------------------------------
 
             let crawler = Crawler::new();
-            let search_tool =
-                SearchTool::new("API_KEY".to_string(), "CX".to_string(), base_dir.clone());
+            let search_tool = SearchTool::new(db.clone(), base_dir.clone());
             let brain_tool = BrainTool::new(db.clone());
             let terminal_tool = TerminalTool::new(base_dir.clone(), Some(db.clone()));
             let knowledge_tool = KnowledgeTool::new(db.clone());
@@ -133,10 +170,12 @@ pub fn run() {
             let http_tool = crate::tools::http_tool::HttpTool::new();
             let script_tool = crate::tools::scripting_tool::ScriptingTool::new();
             let moltbook_tool = crate::tools::moltbook_tool::MoltbookTool::new(base_dir.clone());
+            let pumai_tool = crate::tools::pumai_tool::PumaiTool::new(base_dir.clone());
             let vault_tool = VaultTool::new(base_dir.clone());
 
             let state = AgentState {
                 multi_agent: Arc::new(MultiAgent::new(
+                    base_dir.clone(),
                     crawler,
                     search_tool,
                     brain_tool,
@@ -146,6 +185,7 @@ pub fn run() {
                     http_tool,
                     script_tool,
                     moltbook_tool,
+                    pumai_tool,
                     vault_tool,
                 )),
                 base_dir: base_dir.clone(),
@@ -153,6 +193,19 @@ pub fn run() {
                 db: db.clone(),
             };
             let multi_agent_ref = state.multi_agent.clone();
+            let _ = multi_agent_ref.refresh_external_tools();
+            let lint_config = AppConfig::load(&base_dir);
+            let lint_prompts = vec![
+                lint_config.system_prompt.clone(),
+                lint_config.planner_prompt.unwrap_or_default(),
+                lint_config.critic_prompt.unwrap_or_default(),
+                lint_config.writer_prompt.unwrap_or_default(),
+                lint_config.reflector_prompt.unwrap_or_default(),
+                crate::agent::prompts::get_fallback_reflector_prompt().to_string(),
+            ];
+            for warn in multi_agent_ref.lint_prompt_tool_alignment(&lint_prompts) {
+                log::warn!("[PromptToolLint] {}", warn);
+            }
             app.manage(state);
 
             let app_handle = app.handle().clone();
@@ -253,8 +306,45 @@ pub fn run() {
                 }
             });
 
+            let app_handle_for_sidecar = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri_plugin_shell::ShellExt;
+                match app_handle_for_sidecar.shell().sidecar("websurfx") {
+                    Ok(sidecar) => {
+                        match sidecar.spawn() {
+                            Ok((mut rx, child)) => {
+                                log::info!(
+                                    "Websurfx sidecar spawned successfully (PID: {:?}).",
+                                    child.pid()
+                                );
+
+                                // Store the sidecar handle in state to strictly kill it on exit
+                                app_handle_for_sidecar.manage(crate::state::SidecarState(
+                                    std::sync::Mutex::new(Some(child)),
+                                ));
+
+                                tauri::async_runtime::spawn(async move {
+                                    use tauri_plugin_shell::process::CommandEvent;
+                                    while let Some(event) = rx.recv().await {
+                                        if let CommandEvent::Stdout(line) = event {
+                                            println!(
+                                                "Websurfx: {}",
+                                                String::from_utf8_lossy(&line)
+                                            );
+                                        }
+                                    }
+                                });
+                            }
+                            Err(e) => log::error!("Failed to spawn websurfx sidecar: {}", e),
+                        }
+                    }
+                    Err(e) => log::error!("Failed to initialize websurfx sidecar command: {}", e),
+                }
+            });
+
             Ok(())
         })
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::agent::execute_agent_tools,
             commands::agent::execute_background_scheduler,
@@ -288,9 +378,40 @@ pub fn run() {
             commands::agent::get_next_execution_time,
             commands::agent::summarize_log_file,
             commands::agent::ai_summarize_item
+            ,
+            commands::agent::list_extensions,
+            commands::agent::reload_extensions,
+            commands::agent::set_extension_enabled,
+            commands::agent::list_session_tree,
+            commands::agent::fork_session_branch,
+            commands::agent::resume_session_node
+            ,
+            commands::agent::get_search_metrics,
+            commands::agent::get_provider_health
+            ,
+            commands::agent::run_prompt_tool_lint
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+                // Strictly kill the child process if it exists
+                if let Some(sidecar_state) = app_handle.try_state::<crate::state::SidecarState>() {
+                    if let Some(child) = sidecar_state.0.lock().unwrap().take() {
+                        let pid = child.pid();
+                        log::info!("Killing Websurfx Sidecar (PID: {:?}) on Exit...", pid);
+                        let _ = child.kill();
+
+                        #[cfg(windows)]
+                        {
+                            let _ = std::process::Command::new("taskkill")
+                                .args(&["/F", "/T", "/PID", &pid.to_string()])
+                                .output();
+                        }
+                    }
+                }
+            }
+        });
 }
 
 #[cfg(test)]

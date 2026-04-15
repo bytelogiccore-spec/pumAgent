@@ -6,6 +6,7 @@ use crate::tools::telegram_tool::TelegramTool;
 use crate::AppConfig;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
@@ -90,18 +91,30 @@ async fn handle_callback_query(
     if let Some(data) = q.data {
         let (_, _, _, _, _db) = &*state;
 
-        let (id, is_approve) = if let Some(id) = data.strip_prefix("approve:") {
-            (Some(id), true)
-        } else if let Some(id) = data.strip_prefix("reject:") {
-            (Some(id), false)
+        let (id, hash, is_approve) = if let Some(payload) = data.strip_prefix("approve:") {
+            let mut parts = payload.splitn(2, ':');
+            (parts.next(), parts.next(), true)
+        } else if let Some(payload) = data.strip_prefix("reject:") {
+            let mut parts = payload.splitn(2, ':');
+            (parts.next(), parts.next(), false)
         } else {
-            (None, false)
+            (None, None, false)
         };
 
         if let Some(id) = id {
             let mut map = crate::agent::approval::pending_approvals().lock().await;
-            if let Some(tx) = map.remove(id) {
-                let _ = tx.send(is_approve);
+            if let Some(pending) = map.remove(id) {
+                if pending.expires_at < Instant::now()
+                    || Some(pending.request_hash.as_str()) != hash
+                {
+                    let _ = bot
+                        .answer_callback_query(q.id.clone())
+                        .text("⚠️ Invalid or expired approval token.")
+                        .show_alert(true)
+                        .await;
+                    return Ok(());
+                }
+                let _ = pending.tx.send(is_approve);
                 let (icon, status) = if is_approve {
                     ("✅", "Approved")
                 } else {
@@ -177,7 +190,7 @@ async fn process_telegram_request(
     state: TelegramState,
 ) -> ResponseResult<()> {
     let (_, base_dir, multi_agent, app_handle, db) = &*state;
-    
+
     // Always load the LATEST config from disk to ensure prompt updates are reflected immediately
     let config = AppConfig::load(base_dir);
 
@@ -239,6 +252,7 @@ async fn process_telegram_request(
     let res = orchestrator
         .run_loop(
             Some(format!("Telegram_{}", chat_id)),
+            &format!("telegram-{}", chat_id),
             &config.system_prompt,
             config.planner_prompt.as_deref(),
             config.critic_prompt.as_deref(),
@@ -247,6 +261,7 @@ async fn process_telegram_request(
             &config.language,
             config.max_loops,
             config.use_multi_agent_workflow,
+            config.use_think_mode,
             config.registry_prompt.as_deref(),
             log_tx,
             cancel_flag,
@@ -275,16 +290,16 @@ async fn process_telegram_request(
             // Extract suggestions before stripping them in clean_message_text if they weren't matched?
             // Actually they were already stripped in clean_message_text, so we must extract from resolved_final
             let suggestions = extract_suggestions(&resolved_final);
-            
+
             let mut markup = None;
             if !suggestions.is_empty() {
                 let mut buttons = Vec::new();
                 for sug in suggestions {
-                    // Telegram callback_data limit is 64 BYTES. 
+                    // Telegram callback_data limit is 64 BYTES.
                     // 'suggest:' prefix is 8 bytes. We have ~56 bytes for content.
                     let prefix = "suggest:";
                     let max_bytes = 64 - prefix.len();
-                    
+
                     let mut callback_val = sug.clone();
                     if callback_val.len() > max_bytes {
                         // Safely truncate to byte limit at char boundary
@@ -309,7 +324,9 @@ async fn process_telegram_request(
             }
             if let Err(e) = send_req.await {
                 log::error!("Failed to send final telegram message: {}", e);
-                let _ = bot.send_message(chat_id, format!("❌ Error sending message: {}", e)).await;
+                let _ = bot
+                    .send_message(chat_id, format!("❌ Error sending message: {}", e))
+                    .await;
             }
         }
         Err(e) => {

@@ -79,6 +79,75 @@ impl BrainTool {
         }
     }
 
+    pub fn upsert_structured_memory(
+        &self,
+        facts: &[String],
+        preferences: &[String],
+        todos: &[String],
+    ) -> Result<(), String> {
+        let payload = serde_json::json!({
+            "facts": facts,
+            "preferences": preferences,
+            "todos": todos,
+            "updated_at": chrono::Utc::now().to_rfc3339(),
+        });
+        self.db
+            .insert(
+                "brain_artifacts",
+                b"StructuredMemory.json",
+                payload.to_string().as_bytes(),
+            )
+            .map_err(|e| e.to_string())?;
+        let _ = self.db.flush();
+        Ok(())
+    }
+
+    pub fn get_structured_memory_context(&self) -> String {
+        match self.db.get("brain_artifacts", b"StructuredMemory.json") {
+            Ok(Some(bytes)) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                Ok(v) => {
+                    let mut out = String::from("[STRUCTURED MEMORY]\n");
+                    let facts = v
+                        .get("facts")
+                        .and_then(|x| x.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    let prefs = v
+                        .get("preferences")
+                        .and_then(|x| x.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    let todos = v
+                        .get("todos")
+                        .and_then(|x| x.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    out.push_str("Facts:\n");
+                    for f in facts.into_iter().take(10) {
+                        if let Some(s) = f.as_str() {
+                            out.push_str(&format!("- {}\n", s));
+                        }
+                    }
+                    out.push_str("Preferences:\n");
+                    for p in prefs.into_iter().take(10) {
+                        if let Some(s) = p.as_str() {
+                            out.push_str(&format!("- {}\n", s));
+                        }
+                    }
+                    out.push_str("Todos:\n");
+                    for t in todos.into_iter().take(10) {
+                        if let Some(s) = t.as_str() {
+                            out.push_str(&format!("- {}\n", s));
+                        }
+                    }
+                    out
+                }
+                Err(_) => "[STRUCTURED MEMORY]\nUnavailable.".to_string(),
+            },
+            _ => "[STRUCTURED MEMORY]\nNone.".to_string(),
+        }
+    }
+
     pub fn delete_artifact(&self, name: &str) -> Result<(), String> {
         match self.db.delete("brain_artifacts", name.as_bytes()) {
             Ok(_) => {

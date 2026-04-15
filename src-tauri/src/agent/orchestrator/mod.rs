@@ -183,6 +183,7 @@ impl Orchestrator {
         let brain_files_md = brain_tool
             .list_artifacts()
             .unwrap_or_else(|_| "No brain artifacts stored yet.".to_string());
+        let structured_memory_md = brain_tool.get_structured_memory_context();
 
         let scheduler = crate::agent::scheduler::Scheduler::new(self.db.clone());
         let (pending_tasks, schedules_summary, status_summary) = scheduler.evaluate_schedules();
@@ -240,7 +241,7 @@ impl Orchestrator {
             modules_str.push_str("- No custom skills or workflows learned yet.\n");
         }
 
-        let mut rules_combined = format!("{}{}", rules_str, modules_str);
+        let mut rules_combined = format!("{}{}\n\n{}", rules_str, modules_str, structured_memory_md);
 
         // Add follow-up suggestion instruction
         rules_combined.push_str("\n[FOLLOW-UP SUGGESTIONS]\n");
@@ -271,13 +272,15 @@ impl Orchestrator {
             }
         }
 
-        while let Some(start) = clean.find("<|tool_call>") {
-            if let Some(end) = clean.find("<tool_call|>") {
-                let block = &clean[start..end + "<tool_call|>".len()];
-                clean = clean.replace(block, "");
-            } else {
-                clean = clean.replace("<|tool_call>", "");
-                break;
+        for open_tag in ["<|tool_call>", "<|tool_call|>"] {
+            while let Some(start) = clean.find(open_tag) {
+                if let Some(end) = clean.find("<tool_call|>") {
+                    let block = &clean[start..end + "<tool_call|>".len()];
+                    clean = clean.replace(block, "");
+                } else {
+                    clean = clean.replace(open_tag, "");
+                    break;
+                }
             }
         }
 
@@ -295,6 +298,88 @@ impl Orchestrator {
         clean.trim().to_string()
     }
 
+    pub async fn maybe_compact_messages(
+        &self,
+        mut messages: Vec<ChatMessage>,
+    ) -> Vec<ChatMessage> {
+        let config = crate::config::AppConfig::load(&self.base_dir);
+        if !config.compaction_enabled {
+            return messages;
+        }
+        let keep_recent = config.compaction_keep_recent.max(4);
+        if messages.len() <= keep_recent {
+            return messages;
+        }
+
+        let cutoff = messages.len() - keep_recent;
+        let older = &messages[..cutoff];
+        let mut combined = String::new();
+        for msg in older {
+            combined.push_str(&format!(
+                "[{}]\n{}\n\n",
+                msg.role.to_uppercase(),
+                msg.content
+            ));
+        }
+
+        let prompt = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: crate::agent::prompts::get_compaction_prompt().to_string(),
+                images_base64: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: format!("Summarize this previous conversation context:\n\n{}", combined),
+                images_base64: None,
+            },
+        ];
+
+        if let Ok(summary) = self.get_llm_for_worker().chat(&prompt, 0.3).await {
+            let mut compacted = vec![ChatMessage {
+                role: "system".to_string(),
+                content: format!(
+                    "[COMPACTED CONTEXT SUMMARY]\n{}",
+                    summary.content.trim()
+                ),
+                images_base64: None,
+            }];
+            compacted.extend(messages.drain(cutoff..));
+            return compacted;
+        }
+        messages
+    }
+
+    fn save_session_tree(&self, session_id: &str, history: &[ChatMessage]) {
+        let key = format!("session_tree:{}", session_id);
+        let mut nodes = Vec::new();
+        let mut parent_id: Option<String> = None;
+        for (idx, msg) in history.iter().enumerate() {
+            let id = format!("{}-{}", session_id, idx + 1);
+            nodes.push(crate::state::SessionNode {
+                id: id.clone(),
+                parent_id: parent_id.clone(),
+                role: msg.role.clone(),
+                content: msg.content.clone(),
+                tool_events: Vec::new(),
+                timestamp: chrono::Utc::now().timestamp(),
+            });
+            parent_id = Some(id);
+        }
+
+        let tree = crate::state::SessionTree {
+            session_id: session_id.to_string(),
+            forked_from_session_id: None,
+            active_node_id: parent_id,
+            nodes,
+        };
+
+        if let Ok(json) = serde_json::to_vec(&tree) {
+            let _ = self.db.insert("sessions", key.as_bytes(), &json);
+            let _ = self.db.flush();
+        }
+    }
+
     /// Saves the complete session transcript into the logs/ directory
     fn save_transcript(&self, session_id: Option<String>, history: &[ChatMessage]) {
         let logs_dir = self.base_dir.join("logs");
@@ -302,7 +387,7 @@ impl Orchestrator {
             let _ = fs::create_dir_all(&logs_dir);
         }
 
-        let filename = match session_id {
+        let filename = match session_id.as_ref() {
             Some(id) if !id.is_empty() => format!("{}.md", id),
             _ => format!("Background_{}.md", Local::now().format("%y%m%d_%H%M%S")),
         };
@@ -330,6 +415,12 @@ impl Orchestrator {
             .open(&filepath)
         {
             let _ = file.write_all(out.as_bytes());
+        }
+
+        if let Some(id) = session_id {
+            if !id.trim().is_empty() {
+                self.save_session_tree(&id, history);
+            }
         }
     }
 }

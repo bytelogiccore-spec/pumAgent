@@ -9,6 +9,7 @@ impl super::Orchestrator {
     pub async fn run_multi_agent_pipeline(
         &self,
         session_id: Option<String>,
+        trace_id: &str,
         system_prompt: &str,
         planner_prompt_opt: Option<&str>,
         critic_prompt_opt: Option<&str>,
@@ -16,6 +17,7 @@ impl super::Orchestrator {
         user_messages: Vec<ChatMessage>,
         language: &str,
         max_loops: u32,
+        use_think_mode: bool,
         registry_prompt_opt: Option<&str>,
         log_tx: mpsc::Sender<String>,
         cancel_flag: Arc<AtomicBool>,
@@ -61,6 +63,18 @@ impl super::Orchestrator {
             .replace("{SCHEDULES}", &schedule_files_md)
             .replace("{SKILLS_RULES}", &skills_rules);
 
+        if use_think_mode {
+            planner_prompt = planner_prompt.replace(
+                "{THINK_MODE_RULE}",
+                "**REASONING**: ALWAYS encapsulate your internal thought process, planning, and strategy inside <think>...</think> tags."
+            );
+        } else {
+            planner_prompt = planner_prompt.replace(
+                "{THINK_MODE_RULE}",
+                "**REASONING**: DO NOT output any internal thought processes or planning. Provide your tool calls immediately without preamble."
+            );
+        }
+
         if !planner_prompt.contains("[GLOBAL BEHAVIOR RULES]") {
             planner_prompt.push_str(&format!("\n\n{}", skills_rules));
         }
@@ -102,6 +116,9 @@ impl super::Orchestrator {
                 let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.max_loops_reached", "args": {"loops": max_loops}}))).await;
                 break;
             }
+            if loop_count > 1 {
+                tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+            }
 
             // At step 1, if there are pending scheduled tasks AND this was spawned as a background heartbeat (empty user messages)
             if loop_count == 1 && !pending_tasks.is_empty() && is_background_run {
@@ -134,7 +151,9 @@ impl super::Orchestrator {
                 .run_planner_phase(&history, &mut active_planner_id, &log_tx, loop_count)
                 .await?;
 
-            if let Some(reasoning) = crate::agent::parser::extract_thinking_blocks(&planner_res.content) {
+            if let Some(reasoning) =
+                crate::agent::parser::extract_thinking_blocks(&planner_res.content)
+            {
                 let _ = log_tx
                     .send(format!(
                         "i18n:{}",
@@ -165,7 +184,7 @@ impl super::Orchestrator {
                             serde_json::json!({"key": "log.planner_direct_answer", "args": {}})
                         ))
                         .await;
-                    
+
                     let mut final_out = Self::sanitize_output(text_res);
                     if final_out.trim().is_empty() {
                         final_out = "⚠️ [시스템 알림] 에이전트가 내부 생각(태그)만 작성하고 유저에게 보낼 답변을 적지 않았습니다. 다시 한 번 요청해 주세요.".to_string();
@@ -207,7 +226,7 @@ impl super::Orchestrator {
                 self.save_transcript(session_id.clone(), &history);
                 let mut final_out = Self::sanitize_output(&writer_res.content);
                 if final_out.trim().is_empty() {
-                     final_out = "⚠️ [시스템 알림] Writer 에이전트의 답변 생성 중 오류가 발생하여 최종 메시지가 비어 있습니다.".to_string();
+                    final_out = "⚠️ [시스템 알림] Writer 에이전트의 답변 생성 중 오류가 발생하여 최종 메시지가 비어 있습니다.".to_string();
                 }
                 return Ok((final_out, history));
             }
@@ -223,15 +242,33 @@ impl super::Orchestrator {
             let results = self
                 .multi_agent
                 .execute_tools(
-                    json_blocks,
+                    json_blocks.clone(),
                     Some(self.get_llm_for_planner()),
                     registry_prompt_opt.map(|s| s.to_string()),
+                    Some(trace_id.to_string()),
                 )
                 .await;
 
             let mut result_summary_md = String::from("### Tool Execution Results\n");
-            for r in &results {
+            for (i, r) in results.iter().enumerate() {
                 let status = if r.ok { "SUCCESS" } else { "FAIL" };
+
+                // Extract arguments for cleaner UI logging
+                let mut display_action = r.action.clone();
+                if let Some(req) = json_blocks.get(i) {
+                    if let Some(args_obj) = req.get("args") {
+                        if let Some(query) = args_obj.get("query").and_then(|q| q.as_str()) {
+                            display_action = format!("{} \"{}\"", r.action, query);
+                        } else if let Some(url) = args_obj.get("url").and_then(|u| u.as_str()) {
+                            display_action = format!("{} \"{}\"", r.action, url);
+                        } else if r.tool_name != "brain" {
+                            // omit huge artifacts
+                            let truncated: String = args_obj.to_string().chars().take(30).collect();
+                            display_action = format!("{} {}", r.action, truncated);
+                        }
+                    }
+                }
+
                 let detail = if !r.ok {
                     let mut preview: String = r.output.chars().take(150).collect();
                     if r.output.chars().count() > 150 {
@@ -241,7 +278,7 @@ impl super::Orchestrator {
                 } else {
                     "".to_string()
                 };
-                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name.clone(), "action": r.action.clone(), "status": status, "detail": detail}}))).await;
+                let _ = log_tx.send(format!("i18n:{}", serde_json::json!({"key": "log.tool_result", "args": {"tool": r.tool_name.clone(), "action": display_action, "status": status, "detail": detail}}))).await;
 
                 if r.ok
                     && (r.action == "write" || r.action == "write_artifact")
@@ -265,10 +302,11 @@ impl super::Orchestrator {
                         r.tool_name, r.action
                     ));
                     break;
-                } else if !r.ok && (r.output.contains("Search blocked by bot detection") || r.output.contains("Search failed or blocked")) {
-                    critical_fail = Some(format!(
-                        "🤖 검색 엔진에서 무작위 봇 접근을 감지하여 현재 IP가 일시적으로 검색 차단되었습니다.\n\n*해결 방법: 잠시 후 다시 시도하시거나, Google/Tavily API 키를 설정하여 전용망 검색으로 우회해 주세요.*"
-                    ));
+                } else if !r.ok
+                    && (r.output.contains("Search blocked by bot detection")
+                        || r.output.contains("Search failed or blocked"))
+                {
+                    critical_fail = Some("🤖 검색 엔진에서 무작위 봇 접근을 감지하여 현재 IP가 일시적으로 검색 차단되었습니다.\n\n*해결 방법: 잠시 후 다시 시도하시거나, Google/Tavily API 키를 설정하여 전용망 검색으로 우회해 주세요.*".to_string());
                     break;
                 }
             }
@@ -300,7 +338,9 @@ impl super::Orchestrator {
                 .await
                 .unwrap();
 
-            if let Some(reasoning) = crate::agent::parser::extract_thinking_blocks(&critic_res.content) {
+            if let Some(reasoning) =
+                crate::agent::parser::extract_thinking_blocks(&critic_res.content)
+            {
                 let _ = log_tx
                     .send(format!(
                         "i18n:{}",
@@ -341,13 +381,12 @@ impl super::Orchestrator {
                     images_base64: None,
                 });
 
-
                 // Save transcript and return
                 self.save_transcript(session_id.clone(), &history);
 
                 let mut final_out = Self::sanitize_output(&writer_res.content);
                 if final_out.trim().is_empty() {
-                     final_out = "⚠️ [시스템 알림] 검증(Critic) 이후 Writer 에이전트의 답변 생성 중 오류가 발생하여 메시지가 비어 있습니다.".to_string();
+                    final_out = "⚠️ [시스템 알림] 검증(Critic) 이후 Writer 에이전트의 답변 생성 중 오류가 발생하여 메시지가 비어 있습니다.".to_string();
                 }
                 return Ok((final_out, history));
             } else {

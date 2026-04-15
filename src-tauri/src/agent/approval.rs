@@ -1,11 +1,18 @@
 use crate::tools::telegram_tool::TelegramTool;
-use rand::Rng;
+use rand::RngCore;
+use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 use tokio::sync::{oneshot, Mutex};
 
-pub type PendingMap = Mutex<HashMap<String, oneshot::Sender<bool>>>;
+pub struct PendingApproval {
+    pub tx: oneshot::Sender<bool>,
+    pub request_hash: String,
+    pub expires_at: Instant,
+}
+
+pub type PendingMap = Mutex<HashMap<String, PendingApproval>>;
 
 pub fn pending_approvals() -> &'static PendingMap {
     static MAP: OnceLock<PendingMap> = OnceLock::new();
@@ -13,17 +20,22 @@ pub fn pending_approvals() -> &'static PendingMap {
 }
 
 pub async fn request_approval(telegram_tool: &TelegramTool, command_preview: &str) -> bool {
-    let id_str = {
-        let mut rng = rand::thread_rng();
-        let id: u16 = rng.gen_range(1000..9999);
-        id.to_string()
-    };
+    let id_str = random_token_hex(16);
+    let request_hash = short_request_hash(command_preview);
 
     let (tx, rx) = oneshot::channel();
 
     {
         let mut map = pending_approvals().lock().await;
-        map.insert(id_str.clone(), tx);
+        map.retain(|_, approval| approval.expires_at > Instant::now());
+        map.insert(
+            id_str.clone(),
+            PendingApproval {
+                tx,
+                request_hash: request_hash.clone(),
+                expires_at: Instant::now() + Duration::from_secs(300),
+            },
+        );
     }
 
     let msg = format!(
@@ -32,8 +44,11 @@ pub async fn request_approval(telegram_tool: &TelegramTool, command_preview: &st
     );
 
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::callback("✅ Approve", format!("approve:{}", id_str)),
-        InlineKeyboardButton::callback("❌ Reject", format!("reject:{}", id_str)),
+        InlineKeyboardButton::callback(
+            "✅ Approve",
+            format!("approve:{}:{}", id_str, request_hash),
+        ),
+        InlineKeyboardButton::callback("❌ Reject", format!("reject:{}:{}", id_str, request_hash)),
     ]]);
 
     let status = telegram_tool.send_message(&msg, Some(keyboard)).await;
@@ -46,4 +61,26 @@ pub async fn request_approval(telegram_tool: &TelegramTool, command_preview: &st
     }
 
     rx.await.unwrap_or_default()
+}
+
+pub fn build_approval_payload(tool: &str, action: &str, content: &str) -> String {
+    let hash = short_request_hash(content);
+    format!(
+        "Tool: {}\nAction: {}\nFingerprint: {}\nPayload: {}",
+        tool, action, hash, content
+    )
+}
+
+fn random_token_hex(bytes: usize) -> String {
+    let mut buf = vec![0u8; bytes];
+    rand::thread_rng().fill_bytes(&mut buf);
+    buf.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+}
+
+fn short_request_hash(content: &str) -> String {
+    let hash = content
+        .bytes()
+        .fold(1469598103934665603u64, |acc, b| acc ^ (b as u64))
+        .wrapping_mul(1099511628211);
+    format!("{:016x}", hash)
 }
