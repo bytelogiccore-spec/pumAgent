@@ -1,7 +1,7 @@
 pub mod duckduckgo;
 pub mod google;
 pub mod models;
-pub mod searxng;
+pub mod websurfx;
 pub mod tavily;
 pub mod yahoo;
 
@@ -10,7 +10,7 @@ use google::search_google;
 pub use models::SearchResultItem;
 use rand::seq::SliceRandom;
 use rquest_util::Emulation;
-use searxng::search_searxng;
+use websurfx::search_websurfx;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,6 +24,58 @@ pub struct SearchTool {
 }
 
 impl SearchTool {
+    fn record_search_anomaly(
+        &self,
+        trace_id: Option<&str>,
+        action: &str,
+        normalized_action: &str,
+        details: &[String],
+    ) {
+        if details.is_empty() {
+            return;
+        }
+        let key = format!("search_anomaly:{}", chrono::Utc::now().timestamp_millis());
+        let value = serde_json::json!({
+            "trace_id": trace_id.unwrap_or("trace-unknown"),
+            "action": action,
+            "normalized_action": normalized_action,
+            "details": details,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+        let _ = self
+            .db
+            .insert("metrics", key.as_bytes(), value.to_string().as_bytes());
+    }
+
+    fn extract_query_with_fallback(args: &serde_json::Value) -> (String, Option<&'static str>) {
+        if let Some(q) = args.get("query").and_then(|v| v.as_str()) {
+            let query = q.trim().to_string();
+            if !query.is_empty() {
+                return (query, None);
+            }
+        }
+        for (key, label) in [
+            ("action", "args.action"),
+            ("q", "args.q"),
+            ("keyword", "args.keyword"),
+            ("text", "args.text"),
+        ] {
+            if let Some(v) = args.get(key).and_then(|x| x.as_str()) {
+                let query = v.trim().to_string();
+                if !query.is_empty() {
+                    return (query, Some(label));
+                }
+            }
+        }
+        if let Some(raw) = args.as_str() {
+            let query = raw.trim().to_string();
+            if !query.is_empty() {
+                return (query, Some("args(raw_string)"));
+            }
+        }
+        ("".to_string(), None)
+    }
+
     pub fn new(db: Arc<dbx_core::Database>, base_dir: std::path::PathBuf) -> Self {
         SearchTool { db, base_dir }
     }
@@ -142,44 +194,44 @@ impl SearchTool {
             .cloned()
             .unwrap_or_else(|| query.to_string());
 
-        // 1. Primary Engine: SearXNG (Websurfx Local Sidecar)
-        let tr_clone_searxng = time_range.map(|s| s.to_string());
+        // 1. Primary Engine: Websurfx local sidecar
+        let tr_clone_websurfx = time_range.map(|s| s.to_string());
         log::info!("Searching via Primary Engine (Websurfx Local Sidecar)...");
-        match search_searxng(&client, &primary_query, tr_clone_searxng.as_deref(), num).await {
-            Ok(searxng_results) => {
-                if !searxng_results.is_empty() {
-                    let searxng_len = searxng_results.len();
-                    let mut final_results = searxng_results;
+        match search_websurfx(&client, &primary_query, tr_clone_websurfx.as_deref(), num).await {
+            Ok(websurfx_results) => {
+                if !websurfx_results.is_empty() {
+                    let websurfx_len = websurfx_results.len();
+                    let mut final_results = websurfx_results;
                     self.enrich_scores(&primary_query, &mut final_results);
                     self.record_metric(
                         trace_id,
-                        "searxng",
+                        "websurfx",
                         "success",
                         chrono::Utc::now().timestamp_millis() - search_started,
                     );
                     log::info!(
                         "Websurfx successfully returned {} results.",
-                        searxng_len
+                        websurfx_len
                     );
                     return Ok(final_results);
                 } else {
                     self.record_metric(
                         trace_id,
-                        "searxng",
+                        "websurfx",
                         "empty",
                         chrono::Utc::now().timestamp_millis() - search_started,
                     );
-                    errors.push("SearXNG (Websurfx): No organic results found.".to_string());
+                    errors.push("Websurfx: No organic results found.".to_string());
                 }
             }
             Err(e) => {
                 self.record_metric(
                     trace_id,
-                    "searxng",
+                    "websurfx",
                     "error",
                     chrono::Utc::now().timestamp_millis() - search_started,
                 );
-                let err_msg = format!("SearXNG (Websurfx): {}", e);
+                let err_msg = format!("Websurfx: {}", e);
                 log::warn!("{}", err_msg);
                 errors.push(err_msg);
             }
@@ -336,67 +388,76 @@ impl SearchTool {
         action: String,
         args: serde_json::Value,
     ) -> crate::agent::multi_agent::ToolResult {
-        if action == "query" {
-            let query = if let Some(q) = args.get("query").and_then(|v| v.as_str()) {
-                q.to_string()
-            } else if let Some(s) = args.as_str() {
-                s.to_string()
-            } else {
-                "".to_string()
-            };
-
-            if query.trim().is_empty() {
-                return crate::agent::multi_agent::ToolResult {
-                    tool_name: tool,
-                    action,
-                    ok: false,
-                    output: "Search error: query cannot be empty".into(),
-                };
-            }
-
-            let time_range = args.get("time_range").and_then(|t| t.as_str());
-            let trace_id = args.get("trace_id").and_then(|t| t.as_str());
-            match self.search(&query, time_range, 5, trace_id).await {
-                Ok(items) => {
-                    let content = items
-                        .into_iter()
-                        .map(|item| {
-                            format!(
-                                "Title: {}\nLink: {}\nSnippet: {}\nSource: {}\nScore: {}\nBreakdown(recency/reliability/match/cross): {}/{}/{}/{}\n---",
-                                item.title,
-                                item.link,
-                                item.snippet,
-                                item.source,
-                                item.final_score,
-                                item.recency_score,
-                                item.reliability_score,
-                                item.query_match_score,
-                                item.cross_check_score
-                            )
-                        })
-                        .collect::<Vec<String>>()
-                        .join("\n");
-                    crate::agent::multi_agent::ToolResult {
-                        tool_name: tool,
-                        action,
-                        ok: true,
-                        output: content,
-                    }
-                }
-                Err(e) => crate::agent::multi_agent::ToolResult {
-                    tool_name: tool,
-                    action,
-                    ok: false,
-                    output: format!("Search error: {}", e),
-                },
-            }
+        let mut anomalies = Vec::new();
+        let normalized_action = if action == "query" {
+            "query".to_string()
         } else {
-            crate::agent::multi_agent::ToolResult {
+            anomalies.push(format!(
+                "unexpected search action '{}', coercing to 'query'",
+                action
+            ));
+            "query".to_string()
+        };
+
+        let (query, fallback_source) = Self::extract_query_with_fallback(&args);
+        let trace_id = args.get("trace_id").and_then(|t| t.as_str());
+        if let Some(source) = fallback_source {
+            anomalies.push(format!("query extracted from {}", source));
+        }
+        if query.eq_ignore_ascii_case("query") {
+            anomalies.push("query value is literal keyword 'query'".to_string());
+        }
+        self.record_search_anomaly(trace_id, &action, &normalized_action, &anomalies);
+
+        if query.trim().is_empty() {
+            return crate::agent::multi_agent::ToolResult {
                 tool_name: tool,
-                action,
+                action: normalized_action,
                 ok: false,
-                output: "Unsupported action".into(),
+                output: "Search error: query cannot be empty".into(),
+            };
+        }
+
+        let time_range = args.get("time_range").and_then(|t| t.as_str());
+        match self.search(&query, time_range, 5, trace_id).await {
+            Ok(items) => {
+                let mut content = items
+                    .into_iter()
+                    .map(|item| {
+                        format!(
+                            "Title: {}\nLink: {}\nSnippet: {}\nSource: {}\nScore: {}\nBreakdown(recency/reliability/match/cross): {}/{}/{}/{}\n---",
+                            item.title,
+                            item.link,
+                            item.snippet,
+                            item.source,
+                            item.final_score,
+                            item.recency_score,
+                            item.reliability_score,
+                            item.query_match_score,
+                            item.cross_check_score
+                        )
+                    })
+                    .collect::<Vec<String>>()
+                    .join("\n");
+                if let Some(source) = fallback_source {
+                    content = format!(
+                        "[search_query_fallback_used: {}]\n{}",
+                        source, content
+                    );
+                }
+                crate::agent::multi_agent::ToolResult {
+                    tool_name: tool,
+                    action: normalized_action,
+                    ok: true,
+                    output: content,
+                }
             }
+            Err(e) => crate::agent::multi_agent::ToolResult {
+                tool_name: tool,
+                action: normalized_action,
+                ok: false,
+                output: format!("Search error: {}", e),
+            },
         }
     }
 }

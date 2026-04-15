@@ -17,10 +17,10 @@ struct WebsurfxResult {
     description: Option<String>,
 }
 
-pub async fn search_searxng(
+pub async fn search_websurfx(
     client: &rquest::Client,
     query: &str,
-    _time_range: Option<&str>, // Websurfx might not officially support time ranges via API yet
+    _time_range: Option<&str>,
     num: u32,
 ) -> Result<Vec<SearchResultItem>, Box<dyn Error + Send + Sync>> {
     let local_instance = "http://127.0.0.1:8080";
@@ -28,7 +28,6 @@ pub async fn search_searxng(
     let mut last_error = String::new();
 
     for attempt in 0..max_retries {
-        // Websurfx uses &json=true directly in query string
         let url = format!(
             "{}/search?q={}&json=true",
             local_instance,
@@ -57,7 +56,6 @@ pub async fn search_searxng(
                                 let link = result.url.unwrap_or_default();
                                 let mut snippet = result.description.unwrap_or_default();
 
-                                // Clean out HTML tags from snippet and title if present
                                 snippet = snippet
                                     .replace("<span class=\"searchmatch\">", "")
                                     .replace("</span>", "")
@@ -78,7 +76,7 @@ pub async fn search_searxng(
                                     link,
                                     snippet: snippet.clone(),
                                     recency_score: 0,
-                                    source: "searxng".to_string(),
+                                    source: "websurfx".to_string(),
                                     query_used: query.to_string(),
                                     reliability_score: 0,
                                     query_match_score: 0,
