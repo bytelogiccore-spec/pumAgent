@@ -42,6 +42,14 @@ pub struct ToolResult {
     pub output: String,
 }
 
+#[derive(Clone, Debug)]
+struct NormalizedToolRequest {
+    tool: String,
+    action: String,
+    args: serde_json::Value,
+    anomalies: Vec<String>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ExternalToolMetadata {
     pub name: String,
@@ -71,6 +79,206 @@ fn default_external_tool_kind() -> String {
 }
 
 impl MultiAgent {
+    fn allowed_actions_for_tool(tool: &str) -> Option<&'static [&'static str]> {
+        match tool {
+            "search" => Some(&["query"]),
+            "terminal" => Some(&["execute"]),
+            "http" => Some(&["request"]),
+            "scripting" => Some(&["run_rhai"]),
+            "telegram" => Some(&["send_message"]),
+            "vault" => Some(&["request", "delete"]),
+            _ => None,
+        }
+    }
+
+    fn default_action_for_tool(tool: &str) -> Option<&'static str> {
+        match tool {
+            "search" => Some("query"),
+            "terminal" => Some("execute"),
+            "http" => Some("request"),
+            "scripting" => Some("run_rhai"),
+            "telegram" => Some("send_message"),
+            "vault" => Some("request"),
+            _ => None,
+        }
+    }
+
+    fn required_args_for_tool(tool: &str, action: &str) -> &'static [&'static str] {
+        match (tool, action) {
+            ("search", "query") => &["query"],
+            ("terminal", "execute") => &["command"],
+            ("http", "request") => &["url"],
+            ("scripting", "run_rhai") => &["script"],
+            ("telegram", "send_message") => &["message"],
+            ("vault", "request") | ("vault", "delete") => &["key"],
+            _ => &[],
+        }
+    }
+
+    fn normalize_tool_args(tool: &str, args: &mut serde_json::Value, anomalies: &mut Vec<String>) {
+        if let Some(obj) = args.as_object_mut() {
+            match tool {
+                "search" => {
+                    if !obj.contains_key("query") {
+                        if let Some(v) = obj.get("action").cloned() {
+                            if v.as_str().unwrap_or("").trim().len() > 1 {
+                                obj.insert("query".to_string(), v);
+                                anomalies.push("search args.action promoted to args.query".to_string());
+                            }
+                        }
+                    }
+                }
+                "scripting" => {
+                    if !obj.contains_key("script") {
+                        if let Some(code) = obj.get("code").cloned() {
+                            if code.as_str().unwrap_or("").trim().len() > 1 {
+                                obj.insert("script".to_string(), code);
+                                anomalies.push("scripting args.code promoted to args.script".to_string());
+                            }
+                        }
+                    }
+                }
+                "http" => {
+                    if !obj.contains_key("url") {
+                        if let Some(endpoint) = obj.get("endpoint").cloned() {
+                            if endpoint.as_str().unwrap_or("").trim().len() > 1 {
+                                obj.insert("url".to_string(), endpoint);
+                                anomalies.push("http args.endpoint promoted to args.url".to_string());
+                            }
+                        }
+                    }
+                    if let Some(method) = obj.get("method").and_then(|v| v.as_str()) {
+                        let normalized_method = method.trim().to_uppercase();
+                        if !normalized_method.is_empty() && normalized_method != method {
+                            obj.insert(
+                                "method".to_string(),
+                                serde_json::Value::String(normalized_method.clone()),
+                            );
+                            anomalies.push(format!("http method normalized to '{}'", normalized_method));
+                        }
+                    }
+                }
+                "telegram" => {
+                    if !obj.contains_key("message") {
+                        if let Some(v) = obj.get("text").cloned() {
+                            if v.as_str().unwrap_or("").trim().len() > 1 {
+                                obj.insert("message".to_string(), v);
+                                anomalies.push("telegram args.text promoted to args.message".to_string());
+                            }
+                        }
+                    }
+                }
+                "vault" => {
+                    if !obj.contains_key("key") {
+                        if let Some(v) = obj.get("name").cloned() {
+                            if v.as_str().unwrap_or("").trim().len() > 1 {
+                                obj.insert("key".to_string(), v);
+                                anomalies.push("vault args.name promoted to args.key".to_string());
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn normalize_request(raw_req: &Value) -> NormalizedToolRequest {
+        let mut anomalies = Vec::new();
+        let mut tool = raw_req
+            .get("tool")
+            .and_then(|t| t.as_str())
+            .unwrap_or("unknown")
+            .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
+            .to_string();
+        let mut action = raw_req
+            .get("action")
+            .and_then(|a| a.as_str())
+            .unwrap_or("unknown")
+            .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
+            .to_string();
+
+        // AI Hallucination fallback: tool/action packed as "tool.action"
+        if let Some(idx) = tool.find(':').or_else(|| tool.find('.')) {
+            if action == "unknown" {
+                action = tool[idx + 1..]
+                    .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
+                    .to_string();
+            }
+            let old_tool = tool.clone();
+            tool = tool[..idx]
+                .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
+                .to_string();
+            anomalies.push(format!(
+                "coerced packed tool/action '{}' -> '{}.{}'",
+                old_tool, tool, action
+            ));
+        }
+
+        let mut args = raw_req.get("args").cloned().unwrap_or_else(|| raw_req.clone());
+
+        if let (Some(allowed), Some(default_action)) = (
+            Self::allowed_actions_for_tool(&tool),
+            Self::default_action_for_tool(&tool),
+        ) {
+            let is_allowed = allowed.iter().any(|a| *a == action);
+            if !is_allowed {
+                anomalies.push(format!(
+                    "{} action '{}' coerced to '{}'",
+                    tool, action, default_action
+                ));
+                action = default_action.to_string();
+            }
+        }
+        Self::normalize_tool_args(&tool, &mut args, &mut anomalies);
+
+        NormalizedToolRequest {
+            tool,
+            action,
+            args,
+            anomalies,
+        }
+    }
+
+    fn validate_normalized_request(tool: &str, action: &str, args: &serde_json::Value) -> Option<String> {
+        if let Some(allowed_actions) = Self::allowed_actions_for_tool(tool) {
+            if !allowed_actions.iter().any(|a| *a == action) {
+                return Some(format!(
+                    "Unsupported action for {}: '{}' not in [{}]",
+                    tool,
+                    action,
+                    allowed_actions.join(", ")
+                ));
+            }
+        }
+
+        for req_arg in Self::required_args_for_tool(tool, action) {
+            let value = args.get(req_arg).and_then(|v| v.as_str()).unwrap_or("").trim();
+            if value.is_empty() {
+                return Some(format!("Missing required arg: {}", req_arg));
+            }
+        }
+
+        match tool {
+            "http" => {
+                if action != "request" {
+                    return Some("Unsupported action for http: expected 'request'".to_string());
+                }
+                if let Some(method) = args.get("method").and_then(|v| v.as_str()) {
+                    let allowed = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+                    if !allowed.contains(&method.trim().to_uppercase().as_str()) {
+                        return Some(format!(
+                            "Invalid arg: method '{}' is not in [GET, POST, PUT, DELETE, PATCH]",
+                            method
+                        ));
+                    }
+                }
+            },
+            _ => {}
+        }
+        None
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         base_dir: PathBuf,
@@ -495,33 +703,21 @@ impl MultiAgent {
         let vault_re = regex::Regex::new(r"\{\{vault:([a-zA-Z0-9_\-]+)\}\}").unwrap();
 
         for req in requests {
-            let mut tool = req
-                .get("tool")
-                .and_then(|t| t.as_str())
-                .unwrap_or("unknown")
-                .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
-                .to_string();
-            let mut action = req
-                .get("action")
-                .and_then(|a| a.as_str())
-                .unwrap_or("unknown")
-                .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
-                .to_string();
-
-            // AI Hallucination Fallback
-            if let Some(idx) = tool.find(':').or_else(|| tool.find('.')) {
-                if action == "unknown" {
-                    action = tool[idx + 1..]
-                        .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
-                        .to_string();
-                }
-                tool = tool[..idx]
-                    .trim_matches(|c| c == ':' || c == '.' || c == ' ' || c == '"' || c == '\'')
-                    .to_string();
+            let normalized = Self::normalize_request(&req);
+            let tool = normalized.tool;
+            let action = normalized.action;
+            let mut args = normalized.args;
+            if let Some(validation_error) = Self::validate_normalized_request(&tool, &action, &args) {
+                handles.push(task::spawn(async move {
+                    ToolResult {
+                        tool_name: tool,
+                        action,
+                        ok: false,
+                        output: format!("[ToolRequestValidationError] {}", validation_error),
+                    }
+                }));
+                continue;
             }
-
-            // Vault Macro Interpolation
-            let mut args = req.get("args").cloned().unwrap_or_else(|| req.clone());
             let args_str = args.to_string();
 
             let mut used_secrets = std::collections::HashSet::new();
@@ -539,6 +735,14 @@ impl MultiAgent {
             }
             if let Ok(parsed_args) = serde_json::from_str(&final_args_str) {
                 args = parsed_args;
+            }
+            if !normalized.anomalies.is_empty() {
+                log::warn!(
+                    "[ToolRequestNormalizer] {}.{} anomalies: {}",
+                    tool,
+                    action,
+                    normalized.anomalies.join(" | ")
+                );
             }
             if let Some(tid) = trace_id.clone() {
                 if let Some(obj) = args.as_object_mut() {
