@@ -31,3 +31,5 @@ Cargo.lock
 # Data
 PumAgentData/
 target_check/
+scratch/
+temp_target/

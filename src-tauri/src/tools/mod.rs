@@ -3,6 +3,7 @@ pub mod crawler;
 pub mod http_tool;
 pub mod knowledge;
 pub mod moltbook_tool;
+pub mod pumai_tool;
 pub mod scripting_tool;
 pub mod search;
 pub mod telegram_tool;
