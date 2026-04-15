@@ -195,6 +195,13 @@ async fn process_telegram_request(
     let config = AppConfig::load(base_dir);
 
     log::info!("Telegram Processing: chat_id={}, text={}", chat_id, text);
+    let _ = app_handle.emit(
+        "telegram_activity",
+        serde_json::json!({
+            "active": true,
+            "chat_id": chat_id.to_string(),
+        }),
+    );
 
     let _ = bot
         .send_message(chat_id, format!("🤖 Processing started: `{}`", text))
@@ -335,6 +342,14 @@ async fn process_telegram_request(
                 .await;
         }
     }
+
+    let _ = app_handle.emit(
+        "telegram_activity",
+        serde_json::json!({
+            "active": false,
+            "chat_id": chat_id.to_string(),
+        }),
+    );
 
     Ok(())
 }

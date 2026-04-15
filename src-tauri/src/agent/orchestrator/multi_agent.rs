@@ -338,16 +338,7 @@ impl super::Orchestrator {
                 .await
                 .unwrap();
 
-            if let Some(reasoning) =
-                crate::agent::parser::extract_thinking_blocks(&critic_res.content)
-            {
-                let _ = log_tx
-                    .send(format!(
-                        "i18n:{}",
-                        serde_json::json!({"key": "log.agent_reasoning", "args": {"agent": "Critic", "content": reasoning}})
-                    ))
-                    .await;
-            }
+            // Keep Critic internal reasoning only in session transcript, not realtime logs.
 
             if critic_res.content.contains("STATUS: PASS") {
                 let _ = log_tx
@@ -398,7 +389,7 @@ impl super::Orchestrator {
                 let _ = log_tx
                     .send(format!(
                         "i18n:{}",
-                        serde_json::json!({"key": "log.critic_fail", "args": {"feedback": fb}})
+                        serde_json::json!({"key": "log.critic_fail", "args": {"feedback": "Critic requested another tool iteration. See session log for details."}})
                     ))
                     .await;
                 history.push(ChatMessage {
