@@ -151,16 +151,8 @@ impl super::Orchestrator {
                 .run_planner_phase(&history, &mut active_planner_id, &log_tx, loop_count)
                 .await?;
 
-            if let Some(reasoning) =
-                crate::agent::parser::extract_thinking_blocks(&planner_res.content)
-            {
-                let _ = log_tx
-                    .send(format!(
-                        "i18n:{}",
-                        serde_json::json!({"key": "log.agent_reasoning", "args": {"agent": "Planner", "content": reasoning}})
-                    ))
-                    .await;
-            }
+            // Planner thinking/reasoning blocks stay in the session transcript (raw history),
+            // but are not duplicated into the realtime tool log UI.
 
             let mut json_blocks = planner_res.native_tool_calls.clone();
 

@@ -26,6 +26,8 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
+    const REFLECTOR_SKIP_NEXT_HEARTBEAT_KEY: &'static [u8] = b"reflector:skip_next_heartbeat";
+
     pub fn new(
         routing: OrchestratorRouting,
         multi_agent: Arc<MultiAgent>,
@@ -376,6 +378,31 @@ impl Orchestrator {
             let _ = self.db.insert("sessions", key.as_bytes(), &json);
             let _ = self.db.flush();
         }
+    }
+
+    pub fn mark_skip_next_heartbeat_reflector(&self) {
+        let _ = self
+            .db
+            .insert("config", Self::REFLECTOR_SKIP_NEXT_HEARTBEAT_KEY, b"1");
+        let _ = self.db.flush();
+    }
+
+    pub fn consume_skip_next_heartbeat_reflector(&self) -> bool {
+        let should_skip = self
+            .db
+            .get("config", Self::REFLECTOR_SKIP_NEXT_HEARTBEAT_KEY)
+            .ok()
+            .flatten()
+            .map(|v| v == b"1")
+            .unwrap_or(false);
+
+        if should_skip {
+            let _ = self
+                .db
+                .insert("config", Self::REFLECTOR_SKIP_NEXT_HEARTBEAT_KEY, b"0");
+        }
+        let _ = self.db.flush();
+        should_skip
     }
 
     /// Saves the complete session transcript into the logs/ directory

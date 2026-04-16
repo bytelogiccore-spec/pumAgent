@@ -23,7 +23,7 @@ impl super::Orchestrator {
         log_tx: mpsc::Sender<String>,
         cancel_flag: Arc<AtomicBool>,
     ) -> Result<(String, Vec<ChatMessage>), String> {
-        let _is_background_run = user_messages.is_empty();
+        let is_background_run = user_messages.is_empty();
         let working_messages = self.maybe_compact_messages(user_messages).await;
 
         let (final_out, history) = if use_multi_agent_workflow {
@@ -68,9 +68,32 @@ impl super::Orchestrator {
 
         tokio::spawn(async move {
             // Auto-Memory Consolidation (Reflector Phase)
-            // Trigger reflector if there's significant history (not just 1 system + 1 user + 1 assistant)
-            // Or if it was a multi-agent run which is inherently complex
-            if history_clone.len() > 3 {
+            // Avoid running on every short chat turn. Run only when the exchange is
+            // sufficiently rich (long dialogue, multi-agent flow, or clear tool-heavy traces).
+            let assistant_turns = history_clone.iter().filter(|m| m.role == "assistant").count();
+            let has_tool_heavy_trace = history_clone.iter().any(|m| {
+                m.content.contains("SYSTEM OBSERVATION RESULTS")
+                    || m.content.contains("### Tool Execution Results")
+            });
+            let has_scheduled_task_trace = history_clone
+                .iter()
+                .any(|m| m.content.contains("[SYSTEM: PENDING SCHEDULED TASKS DETECTED]"));
+            let has_real_work_trace = has_tool_heavy_trace
+                || history_clone.iter().any(|m| {
+                    m.role == "assistant"
+                        && !m.content.trim().is_empty()
+                        && !m.content.starts_with("i18n:")
+                });
+            let has_chat_or_scheduled_context =
+                !is_background_run || (is_background_run && has_scheduled_task_trace);
+            let should_run_reflector = history_clone.len() >= 8
+                && has_chat_or_scheduled_context
+                && (use_multi_agent_workflow || assistant_turns >= 3 || has_tool_heavy_trace);
+            let skip_for_idle_heartbeat = is_background_run && !has_real_work_trace;
+            let skip_for_next_heartbeat =
+                is_background_run && orchestrator_clone.consume_skip_next_heartbeat_reflector();
+
+            if should_run_reflector && !skip_for_idle_heartbeat && !skip_for_next_heartbeat {
                 let ref_prompt = crate::agent::prompts::get_fallback_reflector_prompt();
                 orchestrator_clone
                     .run_reflector_pipeline(
@@ -80,6 +103,7 @@ impl super::Orchestrator {
                         log_tx_clone,
                     )
                     .await;
+                orchestrator_clone.mark_skip_next_heartbeat_reflector();
             }
             orchestrator_clone.save_transcript(session_id_clone, &history_clone);
         });

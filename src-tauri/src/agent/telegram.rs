@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 use teloxide::prelude::*;
-use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId};
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone)]
@@ -242,15 +242,29 @@ async fn process_telegram_request(
     let chat_id_clone = chat_id;
     let lang_clone = config.language.clone();
     let db_clone = db.clone();
+    let status_message_id = Arc::new(tokio::sync::Mutex::new(None::<MessageId>));
+    let status_message_id_clone = status_message_id.clone();
 
     tokio::spawn(async move {
         while let Some(log_msg) = log_rx.recv().await {
             let _ = app_handle_clone.emit("tool_log", log_msg.clone());
             let resolved = Orchestrator::resolve_i18n(&log_msg, &lang_clone, &db_clone);
             let (clean_log, _) = TelegramTool::clean_message_text(&resolved);
-            let _ = bot_clone
-                .send_message(chat_id_clone, format!("📋 {}", clean_log))
-                .await;
+            let status_text = clean_log.trim_start_matches("log.").trim().to_string();
+
+            if status_text.is_empty() {
+                continue;
+            }
+
+            let mut current_status = status_message_id_clone.lock().await;
+            if let Some(prev_message_id) = *current_status {
+                let _ = bot_clone.delete_message(chat_id_clone, prev_message_id).await;
+                *current_status = None;
+            }
+
+            if let Ok(sent) = bot_clone.send_message(chat_id_clone, status_text).await {
+                *current_status = Some(sent.id);
+            }
         }
     });
 
@@ -274,6 +288,14 @@ async fn process_telegram_request(
             cancel_flag,
         )
         .await;
+
+    {
+        let mut current_status = status_message_id.lock().await;
+        if let Some(prev_message_id) = *current_status {
+            let _ = bot.delete_message(chat_id, prev_message_id).await;
+            *current_status = None;
+        }
+    }
 
     match res {
         Ok((final_output, history)) => {
